@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { detectProvider, normalizeBaseUrl, providerById } from "../../model-providers";
 import { getStoredModelConfig } from "../../../db/model-config";
+import { outputLanguage, type Locale } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ type UserProviderConfig = { providerId:string; baseUrl:string; apiKey:string; mo
 
 type StoryRequest = {
   mode: "story";
+  locale?: Locale;
   idea: string;
   genre: string;
   style: string;
@@ -22,6 +24,7 @@ type StoryRequest = {
 
 type ImagePromptRequest = {
   mode: "image-prompt";
+  locale?: Locale;
   concept: string;
   purpose: string;
   style: string;
@@ -115,7 +118,7 @@ const storySystem = `你是一名资深电影编剧、导演和 AI 视频提示�
 4. 禁止复用“官方紧急通知”“系统突然规定”“所有线索都指向自己”等万能开场，除非它由本次创意自然产生。不要截取用户句子的前十几个字套入引号。
 5. 每个镜头只承担一个清晰叙事动作，但镜头之间必须存在因果和视觉连续性；结尾必须回收前文建立的视觉或情节信息。
 6. 每条视频提示词必须贴合用户选择的目标模型，包含这个镜头真正需要的主体、动作、空间、镜头与声音，不得复制同一套关键词。
-7. 所有输出使用简体中文；仅在目标模型习惯要求时保留必要英文摄影术语。
+7. 所有可见输出必须使用用户指定的输出语言；仅在目标模型习惯要求时保留必要的摄影或模型术语。
 8. 只返回符合 JSON Schema 的结果。`;
 
 const imagePromptSystem = `你是一名概念艺术总监和图片模型提示词设计师。请根据用户画面创意与视觉参考生成独特、可直接使用的图片提示词，不得套用固定句式。
@@ -261,6 +264,8 @@ export async function POST(request: Request) {
   }
 
   const isStory = body.mode === "story";
+  const locale:Locale=body.locale&&Object.hasOwn(outputLanguage,body.locale)?body.locale:"zh-CN";
+  const languageRule=`本次输出语言：${outputLanguage[locale]}。标题、剧情、分析、镜头、声音与解释字段必须使用该语言；模型专用提示词也使用该语言为主，同时保留目标模型真正需要的英文摄影术语。`;
   if (isStory && (!body.idea?.trim() || body.idea.trim().length > 800)) {
     return jsonResponse({ error: "请提供有效的核心创意。" }, 400);
   }
@@ -277,7 +282,7 @@ export async function POST(request: Request) {
 
   let result:Awaited<ReturnType<typeof callModel>>;
   try{
-    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:isStory?storySystem:imagePromptSystem,prompt,image,schema,schemaName:name,maxTokens:isStory?12000:4000,safetyId:await safetyIdentifier(user.userId)});
+    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isStory?storySystem:imagePromptSystem}\n\n${languageRule}`,prompt,image,schema,schemaName:name,maxTokens:isStory?12000:4000,safetyId:await safetyIdentifier(user.userId)});
   }catch{
     return jsonResponse({error:`${selectedProvider.name} 连接超时或网络不可用，请稍后重试。`},502);
   }
