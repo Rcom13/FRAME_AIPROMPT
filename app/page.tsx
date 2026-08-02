@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type PointerEvent } from "react";
 
 type Shot = { id:number; time:string; shot:string; visual:string; camera:string; audio:string; prompt:string };
 type Story = { title:string; logline:string; hook:string; structure:[string,string][] };
@@ -91,9 +91,11 @@ export default function Home() {
   }
   async function copy(text:string,label:string){ await navigator.clipboard.writeText(text); setCopied(label); setTimeout(()=>setCopied(""),1400); }
   function exportText(){ const content=`${story.title}\n\n核心创意：${idea}\n一句话梗概：${story.logline}\n\n${shots.map(s=>`镜头 ${s.id}｜${s.time}｜${s.shot}\n画面：${s.visual}\n运镜：${s.camera}\n声音：${s.audio}\n提示词：${s.prompt}`).join("\n\n")}`; const blob=new Blob([content],{type:"text/plain;charset=utf-8"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${story.title.replace(/[《》]/g,"")}-分镜脚本.txt`;a.click();URL.revokeObjectURL(a.href); }
+  function trackLight(e:PointerEvent<HTMLElement>){ e.currentTarget.style.setProperty("--mx",`${e.clientX}px`); e.currentTarget.style.setProperty("--my",`${e.clientY}px`); }
 
-  return <main>
-    <header className="topbar"><div className="brand"><span className="brand-mark">帧</span><span>映构</span><em>STORY FORGE</em></div><div className="top-actions"><button className="ghost">创作历史</button><button className="avatar">创</button></div></header>
+  return <main onPointerMove={trackLight}>
+    <div className="ambient ambient-one"/><div className="ambient ambient-two"/><div className="noise"/>
+    <header className="topbar"><div className="brand" aria-label="FRAME AI Story Studio"><span className="brand-symbol"><b>F</b><i/></span><span className="brand-word">FRAME</span><em>AI STORY STUDIO</em></div><div className="top-actions"><button className="ghost">创作历史</button><button className="avatar">创</button></div></header>
     <section className="workspace">
       <aside className="control-panel">
         <div className="eyebrow"><span></span> NEW PROJECT</div><h1>把一个灵感<br/>变成一支影片。</h1><p className="intro">从剧情结构到镜头提示词，为 AI 视频创作者打造的前期工作台。</p>
