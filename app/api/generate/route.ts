@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { detectProvider, normalizeBaseUrl, providerById } from "../../model-providers";
+import { getStoredModelConfig } from "../../../db/model-config";
 
 export const dynamic = "force-dynamic";
 
@@ -243,11 +244,13 @@ export async function POST(request: Request) {
   }
 
   const userConfig=body.providerConfig;
-  const apiKey=userConfig?.apiKey?.trim()||process.env.OPENAI_API_KEY||"";
-  const providerId=userConfig?.providerId||"openai";
+  const storedConfig=userConfig?.apiKey?.trim()?null:await getStoredModelConfig(user.userId);
+  const providerId=userConfig?.providerId||storedConfig?.providerId||"openai";
   const selectedProvider=providerById(providerId);
-  const baseUrl=normalizeBaseUrl(userConfig?.baseUrl||selectedProvider.baseUrl);
-  const generationModel=userConfig?.model?.trim()||process.env.OPENAI_MODEL||"gpt-5.6-terra";
+  const baseUrl=normalizeBaseUrl(userConfig?.baseUrl||storedConfig?.apiBaseUrl||selectedProvider.baseUrl);
+  const storedMatches=storedConfig?.providerId===providerId&&storedConfig.apiBaseUrl===baseUrl;
+  const apiKey=userConfig?.apiKey?.trim()||(storedMatches?storedConfig.apiKey:"")||process.env.OPENAI_API_KEY||"";
+  const generationModel=userConfig?.model?.trim()||storedConfig?.model||process.env.OPENAI_MODEL||"gpt-5.6-terra";
   if(!apiKey)return jsonResponse({error:"请先在 Profile → AI 模型配置中添加 API Key。"},400);
   if(!generationModel)return jsonResponse({error:"请选择一个生成模型。"},400);
   if(!safePublicHttps(baseUrl))return jsonResponse({error:"模型接口必须使用安全的公网 HTTPS 地址。"},400);

@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { detectProvider, normalizeBaseUrl, providerById } from "../../model-providers";
+import { getStoredModelConfig } from "../../../db/model-config";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,16 @@ export async function POST(request: Request) {
   let body: { providerId?: string; baseUrl?: string; apiKey?: string };
   try { body = await request.json(); } catch { return reply({ error: "配置内容格式不正确。" }, 400); }
 
-  const apiKey = body.apiKey?.trim() || "";
-  if (!apiKey || apiKey.length < 12) return reply({ error: "请输入完整的 API Key。" }, 400);
-
   const selected = providerById(body.providerId);
   const baseUrl = normalizeBaseUrl(body.baseUrl || selected.baseUrl);
   if (!safePublicHttps(baseUrl)) return reply({ error: "接口地址必须是安全的公网 HTTPS 地址。" }, 400);
+
+  let apiKey = body.apiKey?.trim() || "";
+  if (!apiKey) {
+    const stored = await getStoredModelConfig(user.userId);
+    if (stored && stored.providerId === selected.id && stored.apiBaseUrl === baseUrl) apiKey = stored.apiKey;
+  }
+  if (!apiKey || apiKey.length < 12) return reply({ error: "请输入完整的 API Key；更换服务商时需要使用对应密钥。" }, 400);
 
   const detected = body.providerId === "custom" ? detectProvider(baseUrl, "", apiKey) : detectProvider(baseUrl, "", apiKey).id === "custom" ? selected : detectProvider(baseUrl, "", apiKey);
   const provider = detected.id === "custom" ? selected : detected;
