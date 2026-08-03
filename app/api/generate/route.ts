@@ -243,9 +243,9 @@ function apiError(status: number, providerName: string, code?: string) {
 
 async function callModel(args:{
   providerId:string;baseUrl:string;apiKey:string;model:string;system:string;prompt:string;images?:string[];
-  schema:any;schemaName:string;maxTokens:number;safetyId:string;
+  schema:any;schemaName:string;maxTokens:number;safetyId:string;reasoningEffort:"low"|"medium";
 }) {
-  const {providerId,baseUrl,apiKey,model,system,prompt,images=[],schema,schemaName,maxTokens,safetyId}=args;
+  const {providerId,baseUrl,apiKey,model,system,prompt,images=[],schema,schemaName,maxTokens,safetyId,reasoningEffort}=args;
   const detected=detectProvider(baseUrl,model,apiKey);
   const selected=providerById(providerId);
   const provider=detected.id==="custom"?selected:detected;
@@ -254,7 +254,7 @@ async function callModel(args:{
   let response:Response;
 
   if(provider.protocol==="openai"){
-    response=await fetch(`${baseUrl}/responses`,{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({model,safety_identifier:safetyId,reasoning:{effort:"medium"},input:[{role:"developer",content:[{type:"input_text",text:system}]},...inputContent(prompt,images)],text:{verbosity:"medium",format:{type:"json_schema",name:schemaName,strict:true,schema}},max_output_tokens:maxTokens})});
+    response=await fetch(`${baseUrl}/responses`,{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({model,safety_identifier:safetyId,reasoning:{effort:reasoningEffort},input:[{role:"developer",content:[{type:"input_text",text:system}]},...inputContent(prompt,images)],text:{verbosity:reasoningEffort==="low"?"low":"medium",format:{type:"json_schema",name:schemaName,strict:true,schema}},max_output_tokens:maxTokens})});
     const payload=await response.json().catch(()=>({}));
     return {response,text:readOutputText(payload),provider};
   }
@@ -373,7 +373,7 @@ export async function POST(request: Request) {
 
   let result:Awaited<ReturnType<typeof callModel>>;
   try{
-    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isIdeaMentor?ideaMentorSystem:isStory?storySystem:isPoseEstimation?poseEstimationSystem:imagePromptSystem}\n\n${languageRule}`,prompt,images,schema,schemaName:name,maxTokens:isIdeaMentor?700:isStory?12000:isPoseEstimation?3000:4000,safetyId:await safetyIdentifier(user.userId)});
+    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isIdeaMentor?ideaMentorSystem:isStory?storySystem:isPoseEstimation?poseEstimationSystem:imagePromptSystem}\n\n${languageRule}`,prompt,images,schema,schemaName:name,maxTokens:isIdeaMentor?600:isStory?12000:isPoseEstimation?2500:2600,safetyId:await safetyIdentifier(user.userId),reasoningEffort:isStory||isPoseEstimation?"medium":"low"});
   }catch{
     return jsonResponse({error:`${selectedProvider.name} 连接超时或网络不可用，请稍后重试。`},502);
   }

@@ -164,7 +164,14 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(generationRoute, /poseEstimationSchema/);
   assert.match(generationRoute, /mode !== "pose-estimation"/);
   assert.match(generationRoute, /人体关键点不完整/);
-  for(const base of ["relaxed","contrapposto","handsHips","sprint","jump","guard","chair","crossLegged","leanForward","overhead","sideBend","lunge"])assert.match(presets,new RegExp(`"${base}"`));
+  for(const base of ["relaxed","contrapposto","handsHips","sprint","jump","guard","chair","crossLegged","leanForward","overhead","sideBend","lunge","supine","sideLying","prone"])assert.match(presets,new RegExp(`"${base}"`));
+  for(const method of ["setView","setFacing","setDragAxis"])assert.match(rig,new RegExp(`${method}:`));
+  assert.match(rig, /dragAxis==="z"/);
+  assert.match(rig, /positions:Record<RigView/);
+  assert.match(studio, /poseCategoryLying/);
+  assert.match(studio, /changePoseView/);
+  assert.match(studio, /changePoseFacing/);
+  assert.match(studio, /changePoseDragAxis/);
   assert.match(presets, /\["female","male"\]/);
   assert.match(packageJson, /"three"/);
   assert.match(css, /\.pose-studio\{/);
@@ -173,6 +180,27 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(css, /\.pose-photo-motion/);
   assert.match(css, /\.pose-subpreset-grid/);
   assert.match(css, /\.pose-people-manager/);
+});
+
+test("connects Story, Prompt, Render, and Pose into a production pipeline", async () => {
+  const [studio, generate, css] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/api/generate/route.ts"),
+    source("../app/globals.css"),
+  ]);
+
+  assert.match(studio, /function prepareStoryForPrompt/);
+  assert.match(studio, /prepareStoryForPrompt\(shot\)/);
+  assert.match(studio, /function sendPromptToRender/);
+  assert.match(studio, /function renderPipelineImage/);
+  assert.match(studio, /function sendPoseToRender/);
+  assert.match(studio, /pipelineRenderPrompt\?renderPipelineImage\(\):generateImagePrompt\(true\)/);
+  assert.match(studio, /pipelinePromptReferences\.slice\(0,1\)/);
+  assert.match(generate, /reasoningEffort:isStory\|\|isPoseEstimation\?"medium":"low"/);
+  assert.match(generate, /isPoseEstimation\?2500:2600/);
+  assert.match(css, /\.creation-pipeline\{/);
+  assert.match(css, /\.pipeline-banner\{/);
+  assert.match(css, /\.pose-navigation\{/);
 });
 
 test("uses a model-backed idea mentor and removes local story templates", async () => {

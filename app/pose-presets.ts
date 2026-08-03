@@ -4,8 +4,8 @@ export type JointName=typeof JOINT_NAMES[number];
 export type Point=[number,number,number];
 export type JointMap=Record<JointName,Point>;
 export type PoseGender="female"|"male";
-export type PoseCategory="standing"|"action"|"seated"|"stretch";
-export type PosePresetBase="relaxed"|"contrapposto"|"handsHips"|"sprint"|"jump"|"guard"|"chair"|"crossLegged"|"leanForward"|"overhead"|"sideBend"|"lunge";
+export type PoseCategory="standing"|"action"|"seated"|"stretch"|"lying";
+export type PosePresetBase="relaxed"|"contrapposto"|"handsHips"|"sprint"|"jump"|"guard"|"chair"|"crossLegged"|"leanForward"|"overhead"|"sideBend"|"lunge"|"supine"|"sideLying"|"prone";
 export type PosePreset="neutral"|`${PoseGender}-${PosePresetBase}`;
 
 export type PosePresetDefinition={id:Exclude<PosePreset,"neutral">;gender:PoseGender;category:PoseCategory;labelKey:string;index:number};
@@ -31,10 +31,13 @@ const basePresets:Record<PosePresetBase,Partial<JointMap>>={
   overhead:{head:[.05,2.84,.04],neck:[0,2.24,0],chest:[0,1.54,0],pelvis:[0,.54,0],shoulderL:[-.7,2.04,0],elbowL:[-.95,2.78,.08],wristL:[-.55,3.5,.14],shoulderR:[.7,2.04,0],elbowR:[.95,2.78,.08],wristR:[.55,3.5,.14],kneeL:[-.5,-.76,.04],ankleL:[-.55,-2.04,.02],kneeR:[.5,-.76,.04],ankleR:[.55,-2.04,.02]},
   sideBend:{head:[-.34,2.72,.04],neck:[-.22,2.16,0],chest:[-.1,1.48,0],pelvis:[.08,.52,0],shoulderL:[-.85,1.9,0],elbowL:[-1.28,1.15,.1],wristL:[-1.25,.32,.12],shoulderR:[.52,2.06,0],elbowR:[.38,2.88,.08],wristR:[-.18,3.48,.16],hipL:[-.34,.47,0],kneeL:[-.48,-.78,.08],ankleL:[-.55,-2.04,.04],hipR:[.5,.47,0],kneeR:[.54,-.78,.08],ankleR:[.58,-2.04,.04]},
   lunge:{head:[.02,2.78,.08],neck:[0,2.2,.02],chest:[0,1.5,.04],pelvis:[0,.46,0],shoulderL:[-.72,1.98,.04],elbowL:[-1.38,2.0,.08],wristL:[-2.08,1.98,.1],shoulderR:[.72,1.98,.04],elbowR:[1.38,2.0,.08],wristR:[2.08,1.98,.1],hipL:[-.42,.4,.02],kneeL:[-1.12,-.35,.62],ankleL:[-1.5,-1.18,.52],hipR:[.42,.4,-.02],kneeR:[.62,-.86,-.38],ankleR:[.72,-2.02,-.22]},
+  supine:{head:[-2.26,-1.72,.05],neck:[-1.72,-1.72,0],chest:[-1.05,-1.72,0],pelvis:[-.08,-1.72,0],shoulderL:[-1.52,-1.72,-.62],elbowL:[-.85,-1.72,-1.12],wristL:[-.08,-1.72,-1.34],shoulderR:[-1.52,-1.72,.62],elbowR:[-.85,-1.72,1.12],wristR:[-.08,-1.72,1.34],hipL:[.02,-1.72,-.38],kneeL:[1.26,-1.72,-.42],ankleL:[2.5,-1.72,-.46],hipR:[.02,-1.72,.38],kneeR:[1.26,-1.72,.42],ankleR:[2.5,-1.72,.46]},
+  sideLying:{head:[-2.18,-1.56,.18],neck:[-1.65,-1.58,.12],chest:[-.98,-1.6,.08],pelvis:[-.03,-1.68,0],shoulderL:[-1.44,-1.76,-.28],elbowL:[-.72,-1.82,-.58],wristL:[.08,-1.82,-.42],shoulderR:[-1.46,-1.42,.38],elbowR:[-.72,-1.34,.76],wristR:[.02,-1.4,.56],hipL:[.08,-1.78,-.3],kneeL:[1.02,-1.58,-.92],ankleL:[2.08,-1.72,-.72],hipR:[.08,-1.58,.3],kneeR:[1.25,-1.52,.66],ankleR:[2.32,-1.66,.46]},
+  prone:{head:[-2.18,-1.62,.18],neck:[-1.66,-1.7,.06],chest:[-1,-1.75,0],pelvis:[-.04,-1.78,0],shoulderL:[-1.46,-1.72,-.62],elbowL:[-2.02,-1.62,-1.12],wristL:[-2.42,-1.5,-.48],shoulderR:[-1.46,-1.72,.62],elbowR:[-2.02,-1.62,1.12],wristR:[-2.42,-1.5,.48],hipL:[.04,-1.78,-.38],kneeL:[1.28,-1.75,-.42],ankleL:[2.48,-1.7,-.5],hipR:[.04,-1.78,.38],kneeR:[1.12,-1.2,.54],ankleR:[1.92,-.52,.64]},
 };
 
-const categories:Record<PoseCategory,PosePresetBase[]>={standing:["relaxed","contrapposto","handsHips"],action:["sprint","jump","guard"],seated:["chair","crossLegged","leanForward"],stretch:["overhead","sideBend","lunge"]};
-const labelKeys:Record<PosePresetBase,string>={relaxed:"poseSubRelaxed",contrapposto:"poseSubContrapposto",handsHips:"poseSubHandsHips",sprint:"poseSubSprint",jump:"poseSubJump",guard:"poseSubGuard",chair:"poseSubChair",crossLegged:"poseSubCrossLegged",leanForward:"poseSubLeanForward",overhead:"poseSubOverhead",sideBend:"poseSubSideBend",lunge:"poseSubLunge"};
+const categories:Record<PoseCategory,PosePresetBase[]>={standing:["relaxed","contrapposto","handsHips"],action:["sprint","jump","guard"],seated:["chair","crossLegged","leanForward"],stretch:["overhead","sideBend","lunge"],lying:["supine","sideLying","prone"]};
+const labelKeys:Record<PosePresetBase,string>={relaxed:"poseSubRelaxed",contrapposto:"poseSubContrapposto",handsHips:"poseSubHandsHips",sprint:"poseSubSprint",jump:"poseSubJump",guard:"poseSubGuard",chair:"poseSubChair",crossLegged:"poseSubCrossLegged",leanForward:"poseSubLeanForward",overhead:"poseSubOverhead",sideBend:"poseSubSideBend",lunge:"poseSubLunge",supine:"poseSubSupine",sideLying:"poseSubSideLying",prone:"poseSubProne"};
 
 function genderizedPose(base:PosePresetBase,gender:PoseGender){
   const source={...neutralPose,...basePresets[base]} as JointMap;const upperScale=gender==="male"?1.08:.96;const lowerScale=gender==="male"?.96:1.06;
