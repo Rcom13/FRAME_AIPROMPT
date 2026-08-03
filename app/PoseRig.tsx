@@ -46,7 +46,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;onPoseChange?:(pose:Joi
     scene.background=new THREE.Color(0x11110f);
     scene.fog=new THREE.FogExp2(0x11110f,.045);
     const camera=new THREE.PerspectiveCamera(36,1,.1,100);camera.position.set(0,1.1,9.8);
-    const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;mount.appendChild(renderer.domElement);
+    const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,powerPreference:"high-performance"});renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.75));renderer.outputColorSpace=THREE.SRGBColorSpace;mount.appendChild(renderer.domElement);
     const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,.4,0);controls.minDistance=6;controls.maxDistance=15;controls.enablePan=false;
     const hemi=new THREE.HemisphereLight(0xffffff,0x35251d,2.2);scene.add(hemi);
     const key=new THREE.DirectionalLight(0xff6b35,3.5);key.position.set(4,6,5);scene.add(key);
@@ -75,14 +75,17 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;onPoseChange?:(pose:Joi
     renderer.domElement.addEventListener("pointerdown",onPointerDown);renderer.domElement.addEventListener("pointermove",onPointerMove);renderer.domElement.addEventListener("pointerup",onPointerUp);renderer.domElement.addEventListener("pointercancel",onPointerUp);renderer.domElement.style.touchAction="none";renderer.domElement.style.cursor="grab";
 
     const resize=()=>{const width=Math.max(1,mount.clientWidth);const height=Math.max(1,mount.clientHeight);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(mount);
-    let frame=0;const animate=()=>{frame=requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)};animate();
+    let frame=0;let stageVisible=true;let pageVisible=document.visibilityState!=="hidden";
+    const intersectionObserver=new IntersectionObserver(entries=>{stageVisible=entries[0]?.isIntersecting??true},{rootMargin:"100px"});intersectionObserver.observe(mount);
+    const onVisibility=()=>{pageVisible=document.visibilityState!=="hidden"};document.addEventListener("visibilitychange",onVisibility);
+    const animate=()=>{frame=requestAnimationFrame(animate);if(!stageVisible||!pageVisible)return;controls.update();renderer.render(scene,camera)};animate();
     apiRef.current={
       capture:()=>{renderer.render(scene,camera);return renderer.domElement.toDataURL("image/png")},
       reset:()=>applyPose("neutral"),
       applyPreset,
       mirror:()=>{const snapshot=Object.fromEntries(Object.entries(jointMeshes).map(([name,mesh])=>[name,mesh.position.clone()]));Object.entries(jointMeshes).forEach(([name,mesh])=>{const paired=name.endsWith("L")?`${name.slice(0,-1)}R`:name.endsWith("R")?`${name.slice(0,-1)}L`:name;const source=snapshot[paired]||snapshot[name];mesh.position.set(-source.x,source.y,source.z)});updateBones();reportPose()},
     };
-    return()=>{cancelAnimationFrame(frame);observer.disconnect();renderer.domElement.removeEventListener("pointerdown",onPointerDown);renderer.domElement.removeEventListener("pointermove",onPointerMove);renderer.domElement.removeEventListener("pointerup",onPointerUp);renderer.domElement.removeEventListener("pointercancel",onPointerUp);controls.dispose();jointGeometry.dispose();headGeometry.dispose();bones.forEach(mesh=>{mesh.geometry.dispose();(mesh.material as THREE.Material).dispose()});Object.values(jointMeshes).forEach(mesh=>(mesh.material as THREE.Material).dispose());renderer.dispose();renderer.domElement.remove()};
+    return()=>{cancelAnimationFrame(frame);observer.disconnect();intersectionObserver.disconnect();document.removeEventListener("visibilitychange",onVisibility);renderer.domElement.removeEventListener("pointerdown",onPointerDown);renderer.domElement.removeEventListener("pointermove",onPointerMove);renderer.domElement.removeEventListener("pointerup",onPointerUp);renderer.domElement.removeEventListener("pointercancel",onPointerUp);controls.dispose();jointGeometry.dispose();headGeometry.dispose();bones.forEach(mesh=>{mesh.geometry.dispose();(mesh.material as THREE.Material).dispose()});Object.values(jointMeshes).forEach(mesh=>(mesh.material as THREE.Material).dispose());renderer.dispose();renderer.domElement.remove()};
   },[onPoseChange]);
 
   return <div ref={mountRef} className="pose-rig-canvas" role="img" aria-label={ariaLabel}/>;

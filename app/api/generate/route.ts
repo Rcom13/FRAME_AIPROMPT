@@ -1,7 +1,8 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { detectProvider, normalizeBaseUrl, providerById } from "../../model-providers";
+import { detectProvider, MODEL_PROVIDERS, normalizeBaseUrl, providerById } from "../../model-providers";
 import { getStoredModelConfig } from "../../../db/model-config";
 import { outputLanguage, type Locale } from "../../i18n";
+import { apiReply, enforceRateLimit, isSafePublicHttps, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError, safeModelId } from "../../api-security";
 
 export const dynamic = "force-dynamic";
 
@@ -143,9 +144,7 @@ const imagePromptSystem = `你是一名概念艺术总监和图片模型提示�
 6. visualAnalysis 必须说明本次实际从哪些参考图提取了哪些元素；文生图模式则说明画面设计推导。
 7. 只返回符合 JSON Schema 的结果。`;
 
-function jsonResponse(body: unknown, status = 200) {
-  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-}
+const jsonResponse=apiReply;
 
 function readOutputText(payload: any): string {
   if (typeof payload?.output_text === "string") return payload.output_text;
@@ -167,16 +166,6 @@ function inputContent(text: string, images: string[] = []) {
   const content: Array<Record<string, unknown>> = [{ type: "input_text", text }];
   for (const image of images) content.push({ type: "input_image", image_url: image, detail: "high" });
   return [{ role: "user", content }];
-}
-
-function safePublicHttps(value: string) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:") return false;
-    const host = url.hostname.toLowerCase();
-    if (host === "localhost" || host.endsWith(".local") || host === "0.0.0.0" || host === "127.0.0.1" || host === "::1") return false;
-    return !/^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
-  } catch { return false; }
 }
 
 function cleanJson(text: string) {
@@ -228,7 +217,7 @@ async function callModel(args:{
   if(provider.protocol==="gemini"){
     const parts:Array<Record<string,unknown>>=[{text:`${system}\n\n${schemaPrompt}`}];
     for(const image of images){const parsedImage=dataImage(image);if(parsedImage)parts.push({inlineData:{mimeType:parsedImage.mediaType,data:parsedImage.data}})}
-    response=await fetch(`${baseUrl}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,{method:"POST",headers:{"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{responseMimeType:"application/json",maxOutputTokens:maxTokens}})});
+    response=await fetch(`${baseUrl}/models/${encodeURIComponent(model)}:generateContent`,{method:"POST",headers:{"x-goog-api-key":apiKey,"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{responseMimeType:"application/json",maxOutputTokens:maxTokens}})});
     const payload=await response.json().catch(()=>({}));
     const text=payload?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"";
     return {response,text,provider};
@@ -250,12 +239,14 @@ async function callModel(args:{
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return jsonResponse({ error: "请先使用 ChatGPT 登录后再生成。" }, 401);
+  const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
+  const limited=await enforceRateLimit(user.userId,"content-generation",30,600);if(limited)return limited;
 
   let body: StoryRequest | ImagePromptRequest;
   try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "请求内容格式不正确。" }, 400);
+    body = await readJsonBody(request,42_000_000);
+  } catch(error) {
+    return error instanceof RequestValidationError?jsonResponse({error:error.message},error.status):jsonResponse({ error: "请求内容格式不正确。" }, 400);
   }
 
   if (body.mode !== "story" && body.mode !== "image-prompt") {
@@ -265,14 +256,15 @@ export async function POST(request: Request) {
   const userConfig=body.providerConfig;
   const storedConfig=userConfig?.apiKey?.trim()?null:await getStoredModelConfig(user.userId);
   const providerId=userConfig?.providerId||storedConfig?.providerId||"openai";
+  if(!MODEL_PROVIDERS.some(item=>item.id===providerId))return jsonResponse({error:"不支持的模型服务商。"},400);
   const selectedProvider=providerById(providerId);
   const baseUrl=normalizeBaseUrl(userConfig?.baseUrl||storedConfig?.apiBaseUrl||selectedProvider.baseUrl);
   const storedMatches=storedConfig?.providerId===providerId&&storedConfig.apiBaseUrl===baseUrl;
   const apiKey=userConfig?.apiKey?.trim()||(storedMatches?storedConfig.apiKey:"")||process.env.OPENAI_API_KEY||"";
   const generationModel=userConfig?.model?.trim()||storedConfig?.model||process.env.OPENAI_MODEL||"gpt-5.6-terra";
   if(!apiKey)return jsonResponse({error:"请先在 Profile → AI 模型配置中添加 API Key。"},400);
-  if(!generationModel)return jsonResponse({error:"请选择一个生成模型。"},400);
-  if(!safePublicHttps(baseUrl))return jsonResponse({error:"模型接口必须使用安全的公网 HTTPS 地址。"},400);
+  if(!safeModelId(generationModel))return jsonResponse({error:"请选择一个有效的生成模型。"},400);
+  if(!isSafePublicHttps(baseUrl)||!matchesTrustedProviderHost(baseUrl,providerId==="custom"?"":selectedProvider.baseUrl))return jsonResponse({error:"模型接口必须使用该服务商的安全公网 HTTPS 地址；自定义接口请使用“兼容接口”。"},400);
 
   const isStory = body.mode === "story";
   const imageWorkflow = isStory ? null : body.imageWorkflow === "image-to-image" || body.imageWorkflow === "multi-reference" ? body.imageWorkflow : "text-to-image";
@@ -283,7 +275,7 @@ export async function POST(request: Request) {
   const images = referenceInputs.map(item=>item?.data).filter((value):value is string=>typeof value==="string");
   const maxReferences = isStory ? 1 : 6;
   const perImageLimit = isStory ? 14_000_000 : 8_000_000;
-  if(referenceInputs.length>maxReferences||images.length!==referenceInputs.length||images.some(image=>!image.startsWith("data:image/")||image.length>perImageLimit)||images.reduce((total,image)=>total+image.length,0)>36_000_000){
+  if(referenceInputs.length>maxReferences||images.length!==referenceInputs.length||images.some(image=>{const parsed=dataImage(image);return !parsed||!["image/jpeg","image/png","image/webp"].includes(parsed.mediaType)||!/^[a-zA-Z0-9+/=]+$/.test(parsed.data)||image.length>perImageLimit})||images.reduce((total,image)=>total+image.length,0)>36_000_000){
     return jsonResponse({error:"参考图片格式不正确、数量超限或文件过大。"},413);
   }
   if(!isStory&&imageWorkflow==="image-to-image"&&images.length!==1)return jsonResponse({error:"图生图模式需要且只能上传一张源图。"},400);
@@ -297,6 +289,8 @@ export async function POST(request: Request) {
   if (!isStory && (!body.concept?.trim() || body.concept.trim().length > 1000)) {
     return jsonResponse({ error: "请提供有效的画面创意。" }, 400);
   }
+  const boundedFields=isStory?[body.genre,body.style,body.platform,body.videoModel,body.referenceNotes||""]:[body.purpose,body.style,body.aspect,body.imageModel,body.referenceNotes||""];
+  if(boundedFields.some(value=>typeof value!=="string"||value.length>1000)||(isStory&&(!Number.isFinite(body.duration)||body.duration<5||body.duration>300)))return jsonResponse({error:"创作参数无效或过长。"},400);
 
   const referenceManifest = referenceInputs.map((item,index)=>{
     const name=typeof item.name==="string"?item.name.slice(0,120):`reference-${index+1}`;

@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getStoredImageGenerationConfig } from "../../../db/image-generation-config";
 import { imageGenerationProviderById } from "../../image-generation-providers";
+import { apiReply, enforceRateLimit, isSafePublicHttps, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError } from "../../api-security";
 
 export const dynamic="force-dynamic";
 
@@ -8,9 +9,8 @@ type Workflow="text-to-image"|"image-to-image"|"multi-reference";
 type ReferenceInput={data:string;role?:string;note?:string};
 type GenerateBody={prompt?:string;workflow?:Workflow;aspect?:string;references?:ReferenceInput[]};
 
-function reply(body:unknown,status=200){return Response.json(body,{status,headers:{"Cache-Control":"no-store"}})}
-function safePublicHttps(value:string){try{const url=new URL(value);if(url.protocol!=="https:")return false;const host=url.hostname.toLowerCase();if(host==="localhost"||host.endsWith(".local")||host==="0.0.0.0"||host==="127.0.0.1"||host==="::1")return false;return !/^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)}catch{return false}}
-function dataImage(value:string){const match=value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s);return match?{mediaType:match[1],data:match[2]}:null}
+const reply=apiReply;
+function dataImage(value:string){const match=value.match(/^data:(image\/(?:jpeg|png|webp));base64,([a-zA-Z0-9+/=\r\n]+)$/s);return match?{mediaType:match[1],data:match[2]}:null}
 function bytesToBase64(buffer:ArrayBuffer){const bytes=new Uint8Array(buffer);let binary="";for(let start=0;start<bytes.length;start+=8192)binary+=String.fromCharCode(...bytes.subarray(start,start+8192));return btoa(binary)}
 function taskToken(value:string){return btoa(value).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")}
 function readTaskToken(value:string){try{const normalized=value.replace(/-/g,"+").replace(/_/g,"/");return atob(normalized+"=".repeat((4-normalized.length%4)%4))}catch{return""}}
@@ -21,11 +21,19 @@ function runwayRatio(aspect:string){const ratio=aspectRatio(aspect);return{"16:9
 function bflSize(aspect:string){const ratio=aspectRatio(aspect);return{"16:9":{width:1536,height:864},"9:16":{width:864,height:1536},"1:1":{width:1024,height:1024},"4:3":{width:1280,height:960},"21:9":{width:1792,height:768}}[ratio]||{width:1024,height:1024}}
 
 async function remoteImageAsDataUrl(value:string){
-  if(!safePublicHttps(value))throw new Error("IMAGE_URL_UNSAFE");
-  const response=await fetch(value,{signal:AbortSignal.timeout(30000)});
+  let current=value;let response:Response|null=null;
+  for(let redirects=0;redirects<=3;redirects+=1){
+    if(!isSafePublicHttps(current))throw new Error("IMAGE_URL_UNSAFE");
+    response=await fetch(current,{redirect:"manual",signal:AbortSignal.timeout(30000)});
+    if(response.status<300||response.status>=400)break;
+    const location=response.headers.get("location");if(!location)throw new Error("IMAGE_REDIRECT_INVALID");
+    current=new URL(location,current).toString();
+  }
+  if(!response||response.status>=300&&response.status<400)throw new Error("IMAGE_REDIRECT_LIMIT");
   if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
   const mediaType=(response.headers.get("content-type")||"image/png").split(";")[0];
-  if(!mediaType.startsWith("image/"))throw new Error("IMAGE_FORMAT_INVALID");
+  if(!["image/jpeg","image/png","image/webp"].includes(mediaType))throw new Error("IMAGE_FORMAT_INVALID");
+  const declared=Number(response.headers.get("content-length")||0);if(Number.isFinite(declared)&&declared>20*1024*1024)throw new Error("IMAGE_TOO_LARGE");
   const buffer=await response.arrayBuffer();
   if(buffer.byteLength>20*1024*1024)throw new Error("IMAGE_TOO_LARGE");
   return`data:${mediaType};base64,${bytesToBase64(buffer)}`;
@@ -43,8 +51,10 @@ async function completedImage(payload:any){
 
 export async function POST(request:Request){
   const user=await getChatGPTUser();if(!user)return reply({error:"请先登录后再生成图片。"},401);
+  const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
+  const limited=await enforceRateLimit(user.userId,"image-generation",20,600);if(limited)return limited;
   const config=await getStoredImageGenerationConfig(user.userId);if(!config)return reply({error:"请先在 Profile 中配置图片生成引擎。"},400);
-  let body:GenerateBody;try{body=await request.json()}catch{return reply({error:"图片生成请求格式不正确。"},400)}
+  let body:GenerateBody;try{body=await readJsonBody(request,42_000_000)}catch(error){return error instanceof RequestValidationError?reply({error:error.message},error.status):reply({error:"图片生成请求格式不正确。"},400)}
   const prompt=body.prompt?.trim()||"";if(!prompt||prompt.length>12000)return reply({error:"图片提示词为空或过长。"},400);
   const workflow:Workflow=body.workflow==="image-to-image"||body.workflow==="multi-reference"?body.workflow:"text-to-image";
   const supplied=Array.isArray(body.references)?body.references:[];
@@ -54,7 +64,7 @@ export async function POST(request:Request){
   if(references.some(item=>!dataImage(item.data)||item.data.length>8_000_000)||references.reduce((sum,item)=>sum+item.data.length,0)>36_000_000)return reply({error:"参考图格式不正确或总体积过大。"},413);
   const provider=imageGenerationProviderById(config.providerId);
   const baseUrl=config.apiBaseUrl.replace(/\/+$/,"");
-  if(!safePublicHttps(baseUrl))return reply({error:"图片生成接口地址不安全。"},400);
+  if(!matchesTrustedProviderHost(baseUrl,provider.baseUrl))return reply({error:"图片生成接口必须使用该服务商的官方安全 HTTPS 地址。"},400);
 
   try{
     if(provider.protocol==="openai-images"){
@@ -101,8 +111,10 @@ export async function POST(request:Request){
 
 export async function GET(request:Request){
   const user=await getChatGPTUser();if(!user)return reply({error:"请先登录。"},401);
+  const limited=await enforceRateLimit(user.userId,"image-generation-poll",300,600);if(limited)return limited;
   const config=await getStoredImageGenerationConfig(user.userId);if(!config)return reply({error:"图片生成引擎尚未配置。"},400);
   const provider=imageGenerationProviderById(config.providerId);const url=new URL(request.url);
+  if(!matchesTrustedProviderHost(config.apiBaseUrl,provider.baseUrl))return reply({error:"图片生成接口配置不安全。"},400);
   try{
     if(provider.protocol==="runway"){
       const taskId=url.searchParams.get("taskId")||"";if(!/^[a-zA-Z0-9_-]{8,100}$/.test(taskId))return reply({error:"图片任务编号无效。"},400);
@@ -115,7 +127,7 @@ export async function GET(request:Request){
     }
     if(provider.protocol==="bfl"){
       const pollingUrl=readTaskToken(url.searchParams.get("pollToken")||"");
-      if(!safePublicHttps(pollingUrl)||!new URL(pollingUrl).hostname.toLowerCase().endsWith(".bfl.ai"))return reply({error:"FLUX 任务查询地址无效。"},400);
+      if(!isSafePublicHttps(pollingUrl)||!new URL(pollingUrl).hostname.toLowerCase().endsWith(".bfl.ai"))return reply({error:"FLUX 任务查询地址无效。"},400);
       const response=await fetch(pollingUrl,{headers:{"x-key":config.apiKey,accept:"application/json"},signal:AbortSignal.timeout(30000)});
       const payload=await response.json().catch(()=>({}));if(!response.ok)return reply({error:providerMessage(payload,"无法读取 FLUX 图片任务。")},502);
       if(payload?.status==="Error"||payload?.status==="Failed"||payload?.status==="Request Moderated")return reply({status:"failed",error:providerMessage(payload,"FLUX 图片生成失败。")});

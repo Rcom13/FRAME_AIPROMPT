@@ -134,3 +134,64 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(css, /\.pose-studio\{/);
   assert.match(css, /\.pose-rig-canvas/);
 });
+
+test("enforces request boundaries on every mutating account and generation API", async () => {
+  const routes = await Promise.all([
+    source("../app/api/model-config/route.ts"),
+    source("../app/api/image-config/route.ts"),
+    source("../app/api/models/route.ts"),
+    source("../app/api/generate/route.ts"),
+    source("../app/api/generate-image/route.ts"),
+  ]);
+
+  for (const route of routes) {
+    assert.match(route, /rejectCrossSiteMutation\(request\)/);
+    assert.match(route, /enforceRateLimit\(user\.userId/);
+    assert.match(route, /readJsonBody\(request,/);
+  }
+});
+
+test("hardens provider URLs, API keys, remote downloads, and global responses", async () => {
+  const [security, models, generate, generateImage, worker, schema, migration] = await Promise.all([
+    source("../app/api-security.ts"),
+    source("../app/api/models/route.ts"),
+    source("../app/api/generate/route.ts"),
+    source("../app/api/generate-image/route.ts"),
+    source("../worker/index.ts"),
+    source("../db/schema.ts"),
+    source("../drizzle/0002_friendly_molten_man.sql"),
+  ]);
+
+  for (const blocked of ["localhost", "metadata.google.internal", ".internal", "169&&b===254", "2001:db8"]) {
+    assert.match(security, new RegExp(blocked.replaceAll(".", "\\.")));
+  }
+  assert.match(security, /url\.username\|\|url\.password/);
+  assert.match(security, /new URL\(value\)\.hostname\.toLowerCase\(\)===new URL\(officialBaseUrl\)/);
+  assert.match(models, /"x-goog-api-key"/);
+  assert.match(generate, /"x-goog-api-key"/);
+  assert.doesNotMatch(`${models}\n${generate}`, /\?key=\$\{/);
+  assert.match(generateImage, /redirect:"manual"/);
+  assert.match(generateImage, /redirects<=3/);
+  for (const header of ["Content-Security-Policy", "Strict-Transport-Security", "X-Frame-Options", "Permissions-Policy", "X-Content-Type-Options"]) {
+    assert.match(worker, new RegExp(header));
+  }
+  assert.match(schema, /apiRateLimits/);
+  assert.match(migration, /CREATE TABLE `api_rate_limits`/);
+});
+
+test("adds keyboard navigation, visible focus states, and background GPU throttling", async () => {
+  const [studio, rig, css] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/PoseRig.tsx"),
+    source("../app/globals.css"),
+  ]);
+
+  assert.match(studio, /className="studio-switcher"/);
+  assert.match(studio, /event\.altKey/);
+  assert.match(studio, /event\.key==="Escape"/);
+  assert.match(studio, /className="skip-link"/);
+  assert.match(studio, /aria-live="polite"/);
+  assert.match(css, /:focus-visible/);
+  assert.match(rig, /IntersectionObserver/);
+  assert.match(rig, /visibilitychange/);
+});

@@ -1,23 +1,11 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { detectProvider, normalizeBaseUrl, providerById } from "../../model-providers";
+import { detectProvider, MODEL_PROVIDERS, normalizeBaseUrl, providerById } from "../../model-providers";
 import { getStoredModelConfig } from "../../../db/model-config";
+import { apiReply, enforceRateLimit, isSafePublicHttps, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError } from "../../api-security";
 
 export const dynamic = "force-dynamic";
 
-function reply(body: unknown, status = 200) {
-  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-}
-
-function safePublicHttps(value: string) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:") return false;
-    const host = url.hostname.toLowerCase();
-    if (host === "localhost" || host.endsWith(".local") || host === "0.0.0.0" || host === "127.0.0.1" || host === "::1") return false;
-    if (/^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return false;
-    return true;
-  } catch { return false; }
-}
+const reply=apiReply;
 
 function modelOptions(payload: any, providerId: string) {
   const raw = providerId === "gemini" ? payload?.models : payload?.data ?? payload?.models;
@@ -38,13 +26,17 @@ function modelOptions(payload: any, providerId: string) {
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return reply({ error: "请先登录后再配置模型。" }, 401);
+  const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
+  const limited=await enforceRateLimit(user.userId,"model-discovery",30,3600);if(limited)return limited;
 
   let body: { providerId?: string; baseUrl?: string; apiKey?: string };
-  try { body = await request.json(); } catch { return reply({ error: "配置内容格式不正确。" }, 400); }
+  try { body = await readJsonBody(request,32_768); } catch(error) { return error instanceof RequestValidationError?reply({error:error.message},error.status):reply({ error: "配置内容格式不正确。" }, 400); }
+
+  if(!MODEL_PROVIDERS.some(item=>item.id===body.providerId))return reply({error:"不支持的模型服务商。"},400);
 
   const selected = providerById(body.providerId);
   const baseUrl = normalizeBaseUrl(body.baseUrl || selected.baseUrl);
-  if (!safePublicHttps(baseUrl)) return reply({ error: "接口地址必须是安全的公网 HTTPS 地址。" }, 400);
+  if (!isSafePublicHttps(baseUrl)||!matchesTrustedProviderHost(baseUrl,selected.id==="custom"?"":selected.baseUrl)) return reply({ error: "接口地址必须是该服务商的安全公网 HTTPS 地址；自定义接口请使用“兼容接口”。" }, 400);
 
   let apiKey = body.apiKey?.trim() || "";
   if (!apiKey) {
@@ -62,7 +54,8 @@ export async function POST(request: Request) {
     headers["x-api-key"] = apiKey;
     headers["anthropic-version"] = "2023-06-01";
   } else if (provider.protocol === "gemini") {
-    url = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
+    url = `${baseUrl}/models`;
+    headers["x-goog-api-key"] = apiKey;
   } else {
     headers.Authorization = `Bearer ${apiKey}`;
   }

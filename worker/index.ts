@@ -19,6 +19,37 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline'",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+function secureResponse(response: Response, url: URL) {
+  const headers = new Headers(response.headers);
+  headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()");
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  headers.set("X-Permitted-Cross-Domain-Policies", "none");
+  if (url.pathname.startsWith("/api/") || headers.get("content-type")?.includes("text/html")) headers.set("Cache-Control", "no-store");
+  else if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/assets/")) headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -31,16 +62,17 @@ const worker = {
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
+      const response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },
       }, allowedWidths);
+      return secureResponse(response, url);
     }
 
-    return handler.fetch(request, env, ctx);
+    return secureResponse(await handler.fetch(request, env, ctx), url);
   },
 };
 

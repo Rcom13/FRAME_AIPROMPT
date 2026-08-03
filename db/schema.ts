@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { index, sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 
 export const modelConfigs = sqliteTable("model_configs", {
   userId: text("user_id").primaryKey(),
@@ -21,3 +21,9 @@ export const imageGenerationConfigs = sqliteTable("image_generation_configs", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+export const apiRateLimits = sqliteTable("api_rate_limits", {
+  bucket: text("bucket").primaryKey(),
+  count: integer("count").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+}, table=>[index("idx_api_rate_limits_expires_at").on(table.expiresAt)]);

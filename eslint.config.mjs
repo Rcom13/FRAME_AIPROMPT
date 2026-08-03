@@ -9,10 +9,24 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "dist/**",
+    ".sites-stage*/**",
+    ".wrangler/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    files: ["app/api/**/*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  {
+    files: ["app/Studio.tsx"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+      "@next/next/no-img-element": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
