@@ -54,3 +54,26 @@ test("supports four persistent UI languages and forwards output language", async
   assert.match(generate, /本次输出语言/);
   assert.match(generate, /outputLanguage\[locale\]/);
 });
+
+test("supports text, single-image, and multi-reference image prompt workflows", async () => {
+  const [studio, i18n, generate, css] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/i18n.ts"),
+    source("../app/api/generate/route.ts"),
+    source("../app/globals.css"),
+  ]);
+
+  for (const workflow of ["text-to-image", "image-to-image", "multi-reference"]) {
+    assert.match(studio, new RegExp(`"${workflow}"`));
+  }
+  assert.match(studio, /multiple=\{imageWorkflow==="multi-reference"\}/);
+  assert.match(studio, /referenceImages:references\.map/);
+  assert.match(studio, /referenceRoleLabel\(locale,role\)/);
+  assert.match(i18n, /workflowMultiDesc/);
+  assert.match(generate, /for \(const image of images\)/);
+  assert.match(generate, /多参考图生图模式需要上传 2–6 张参考图/);
+  assert.match(generate, /逐张独立分析/);
+  assert.match(css, /\.image-workflow-switch\{/);
+  assert.match(css, /\.reference-grid\{/);
+  assert.match(css, /\.canvas-reference-strip\{/);
+});

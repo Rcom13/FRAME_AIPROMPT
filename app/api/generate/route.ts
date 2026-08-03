@@ -6,6 +6,7 @@ import { outputLanguage, type Locale } from "../../i18n";
 export const dynamic = "force-dynamic";
 
 type UserProviderConfig = { providerId:string; baseUrl:string; apiKey:string; model:string };
+type ReferenceImageInput = { data:string; name?:string; role?:string; note?:string };
 
 type StoryRequest = {
   mode: "story";
@@ -25,13 +26,14 @@ type StoryRequest = {
 type ImagePromptRequest = {
   mode: "image-prompt";
   locale?: Locale;
+  imageWorkflow?: "text-to-image" | "image-to-image" | "multi-reference";
   concept: string;
   purpose: string;
   style: string;
   aspect: string;
   imageModel: string;
   referenceNotes?: string;
-  referenceImage?: string | null;
+  referenceImages?: ReferenceImageInput[];
   providerConfig?: UserProviderConfig;
 };
 
@@ -109,6 +111,14 @@ const modelFormatGuide: Record<string, string> = {
   "通用视频模型": "使用可迁移的结构化描述：主体、动作、环境、镜头、构图、光线、色彩、材质、声音、连续性和避免项。",
 };
 
+const imageModelFormatGuide:Record<string,string>={
+  "ChatGPT Image":"使用连贯、明确的自然语言说明主体、空间关系、构图、光线、材质、文字内容与编辑边界；对参考图逐项说明保留和改变的元素。",
+  "Midjourney":"先写最重要的主体与场景，再写构图、镜头、光线、色彩、材质和风格；保持视觉关键词密度但避免同义词堆砌，画幅由用户选择单独控制。",
+  "Seedream":"使用清晰的中文自然语言分层描述主体、动作/状态、环境、景别、构图、光影、色彩、材质和细节；多参考图时明确每张图的职责与融合关系。",
+  "Flux":"使用具体自然语言描述主体身份、姿态、空间位置、镜头视角、光线与真实材质；文字、手部、数量和布局要求必须准确且不含矛盾修饰。",
+  "Runway Gen-4 Image":"使用直接、可执行的视觉描述，按主体、动作/状态、场景、构图、相机、光线、色彩与风格组织；参考图只承担用户指定的视觉职责。",
+};
+
 const storySystem = `你是一名资深电影编剧、导演和 AI 视频提示词设计师。你的任务不是填写模板，而是根据用户本次提交的核心创意与视觉参考，创作独一无二、可拍摄、可生成的视频方案。
 
 硬性要求：
@@ -123,7 +133,14 @@ const storySystem = `你是一名资深电影编剧、导演和 AI 视频提示�
 
 const imagePromptSystem = `你是一名概念艺术总监和图片模型提示词设计师。请根据用户画面创意与视觉参考生成独特、可直接使用的图片提示词，不得套用固定句式。
 
-如果提供图片，必须先识别并说明画面主体、人物/物体特征、构图、视角、光线、色彩、材质与氛围，再将真正相关的视觉锚点融入提示词。尊重用户指定的用途、风格、画幅和目标图片模型。只返回符合 JSON Schema 的结果。`;
+硬性要求：
+1. 文生图只从本次文字创意出发，不虚构或声称看到了参考图片。
+2. 图生图必须先识别源图的主体身份、形态、构图、视角、光线、色彩、材质与氛围，再明确哪些视觉锚点保留、哪些按新创意改变。
+3. 多参考图必须按参考图编号逐张独立分析，严格遵守每张图片标注的参考职责与补充要求；先提取各自可用信息，再融合为一个统一画面，禁止把多图笼统平均、混成同一来源或遗漏其中一张。
+4. 当参考图互相冲突时，用户填写的职责和补充要求优先；没有说明时，主体身份优先于风格，明确构图优先于泛化氛围。
+5. 提示词必须贴合目标图片模型的表达习惯，写清主体、动作/状态、环境、构图、镜头、光线、色彩、材质、细节层级及需要避免的内容，并尊重用途与画幅。
+6. visualAnalysis 必须说明本次实际从哪些参考图提取了哪些元素；文生图模式则说明画面设计推导。
+7. 只返回符合 JSON Schema 的结果。`;
 
 function jsonResponse(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -145,9 +162,9 @@ async function safetyIdentifier(userId: string) {
   return `frame_${Array.from(new Uint8Array(digest)).slice(0, 12).map(x => x.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function inputContent(text: string, image?: string | null) {
+function inputContent(text: string, images: string[] = []) {
   const content: Array<Record<string, unknown>> = [{ type: "input_text", text }];
-  if (image) content.push({ type: "input_image", image_url: image, detail: "high" });
+  for (const image of images) content.push({ type: "input_image", image_url: image, detail: "high" });
   return [{ role: "user", content }];
 }
 
@@ -181,10 +198,10 @@ function apiError(status: number, providerName: string, code?: string) {
 }
 
 async function callModel(args:{
-  providerId:string;baseUrl:string;apiKey:string;model:string;system:string;prompt:string;image?:string|null;
+  providerId:string;baseUrl:string;apiKey:string;model:string;system:string;prompt:string;images?:string[];
   schema:any;schemaName:string;maxTokens:number;safetyId:string;
 }) {
-  const {providerId,baseUrl,apiKey,model,system,prompt,image,schema,schemaName,maxTokens,safetyId}=args;
+  const {providerId,baseUrl,apiKey,model,system,prompt,images=[],schema,schemaName,maxTokens,safetyId}=args;
   const detected=detectProvider(baseUrl,model,apiKey);
   const selected=providerById(providerId);
   const provider=detected.id==="custom"?selected:detected;
@@ -193,15 +210,14 @@ async function callModel(args:{
   let response:Response;
 
   if(provider.protocol==="openai"){
-    response=await fetch(`${baseUrl}/responses`,{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({model,safety_identifier:safetyId,reasoning:{effort:"medium"},input:[{role:"developer",content:[{type:"input_text",text:system}]},...inputContent(prompt,image)],text:{verbosity:"medium",format:{type:"json_schema",name:schemaName,strict:true,schema}},max_output_tokens:maxTokens})});
+    response=await fetch(`${baseUrl}/responses`,{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({model,safety_identifier:safetyId,reasoning:{effort:"medium"},input:[{role:"developer",content:[{type:"input_text",text:system}]},...inputContent(prompt,images)],text:{verbosity:"medium",format:{type:"json_schema",name:schemaName,strict:true,schema}},max_output_tokens:maxTokens})});
     const payload=await response.json().catch(()=>({}));
     return {response,text:readOutputText(payload),provider};
   }
 
   if(provider.protocol==="anthropic"){
     const content:Array<Record<string,unknown>>=[{type:"text",text:schemaPrompt}];
-    const parsedImage=dataImage(image);
-    if(parsedImage)content.push({type:"image",source:{type:"base64",media_type:parsedImage.mediaType,data:parsedImage.data}});
+    for(const image of images){const parsedImage=dataImage(image);if(parsedImage)content.push({type:"image",source:{type:"base64",media_type:parsedImage.mediaType,data:parsedImage.data}})}
     response=await fetch(`${baseUrl}/messages`,{method:"POST",headers:{"x-api-key":apiKey,"anthropic-version":"2023-06-01","Content-Type":"application/json"},signal:timeout,body:JSON.stringify({model,max_tokens:maxTokens,system,messages:[{role:"user",content}]})});
     const payload=await response.json().catch(()=>({}));
     const text=(payload?.content||[]).filter((x:any)=>x?.type==="text").map((x:any)=>x.text).join("\n");
@@ -210,8 +226,7 @@ async function callModel(args:{
 
   if(provider.protocol==="gemini"){
     const parts:Array<Record<string,unknown>>=[{text:`${system}\n\n${schemaPrompt}`}];
-    const parsedImage=dataImage(image);
-    if(parsedImage)parts.push({inlineData:{mimeType:parsedImage.mediaType,data:parsedImage.data}});
+    for(const image of images){const parsedImage=dataImage(image);if(parsedImage)parts.push({inlineData:{mimeType:parsedImage.mediaType,data:parsedImage.data}})}
     response=await fetch(`${baseUrl}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,{method:"POST",headers:{"Content-Type":"application/json"},signal:timeout,body:JSON.stringify({contents:[{role:"user",parts}],generationConfig:{responseMimeType:"application/json",maxOutputTokens:maxTokens}})});
     const payload=await response.json().catch(()=>({}));
     const text=payload?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"";
@@ -219,7 +234,7 @@ async function callModel(args:{
   }
 
   const userContent:Array<Record<string,unknown>>=[{type:"text",text:schemaPrompt}];
-  if(image)userContent.push({type:"image_url",image_url:{url:image,detail:"high"}});
+  for(const image of images)userContent.push({type:"image_url",image_url:{url:image,detail:"high"}});
   const requestBody:any={model,messages:[{role:"system",content:system},{role:"user",content:userContent}],max_tokens:maxTokens,temperature:.7,response_format:{type:"json_object"}};
   response=await fetch(`${baseUrl}/chat/completions`,{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json","HTTP-Referer":"https://story-forge-cn.rjins.chatgpt.site","X-Title":"FRAME AI STORY STUDIO"},signal:timeout,body:JSON.stringify(requestBody)});
   if(!response.ok&&response.status===400){
@@ -258,12 +273,21 @@ export async function POST(request: Request) {
   if(!generationModel)return jsonResponse({error:"请选择一个生成模型。"},400);
   if(!safePublicHttps(baseUrl))return jsonResponse({error:"模型接口必须使用安全的公网 HTTPS 地址。"},400);
 
-  const image = body.referenceImage;
-  if (image && (!image.startsWith("data:image/") || image.length > 14_000_000)) {
-    return jsonResponse({ error: "参考图片格式不正确或文件过大。" }, 413);
-  }
-
   const isStory = body.mode === "story";
+  const imageWorkflow = isStory ? null : body.imageWorkflow === "image-to-image" || body.imageWorkflow === "multi-reference" ? body.imageWorkflow : "text-to-image";
+  const suppliedReferences:ReferenceImageInput[] = isStory
+    ? body.referenceImage ? [{data:body.referenceImage,name:"story-reference",role:"source"}] : []
+    : Array.isArray(body.referenceImages) ? body.referenceImages : [];
+  const referenceInputs = imageWorkflow === "text-to-image" ? [] : suppliedReferences;
+  const images = referenceInputs.map(item=>item?.data).filter((value):value is string=>typeof value==="string");
+  const maxReferences = isStory ? 1 : 6;
+  const perImageLimit = isStory ? 14_000_000 : 8_000_000;
+  if(referenceInputs.length>maxReferences||images.length!==referenceInputs.length||images.some(image=>!image.startsWith("data:image/")||image.length>perImageLimit)||images.reduce((total,image)=>total+image.length,0)>36_000_000){
+    return jsonResponse({error:"参考图片格式不正确、数量超限或文件过大。"},413);
+  }
+  if(!isStory&&imageWorkflow==="image-to-image"&&images.length!==1)return jsonResponse({error:"图生图模式需要且只能上传一张源图。"},400);
+  if(!isStory&&imageWorkflow==="multi-reference"&&(images.length<2||images.length>6))return jsonResponse({error:"多参考图生图模式需要上传 2–6 张参考图。"},400);
+
   const locale:Locale=body.locale&&Object.hasOwn(outputLanguage,body.locale)?body.locale:"zh-CN";
   const languageRule=`本次输出语言：${outputLanguage[locale]}。标题、剧情、分析、镜头、声音与解释字段必须使用该语言；模型专用提示词也使用该语言为主，同时保留目标模型真正需要的英文摄影术语。`;
   if (isStory && (!body.idea?.trim() || body.idea.trim().length > 800)) {
@@ -273,16 +297,23 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "请提供有效的画面创意。" }, 400);
   }
 
+  const referenceManifest = referenceInputs.map((item,index)=>{
+    const name=typeof item.name==="string"?item.name.slice(0,120):`reference-${index+1}`;
+    const role=typeof item.role==="string"?item.role.slice(0,40):"unspecified";
+    const note=typeof item.note==="string"?item.note.trim().slice(0,500):"";
+    return `参考图 ${index+1}｜文件：${name}｜职责：${role}｜用户要求：${note||"无"}`;
+  }).join("\n");
+  const workflowName=imageWorkflow==="image-to-image"?"图生图（单一源图重构）":imageWorkflow==="multi-reference"?"多参考图生图（逐图提取后融合）":"文生图（纯文字设计）";
   const prompt = isStory
-    ? `请完成本次视频创作。\n\n核心创意：${body.idea.trim()}\n题材：${body.genre}\n视觉风格：${body.style}\n成片时长：${body.duration} 秒\n发布平台：${body.platform}\n目标视频模型：${body.videoModel}\n目标镜头数量：${body.duration <= 15 ? 5 : body.duration <= 30 ? 8 : body.duration <= 45 ? 10 : 12}\n角色一致性锁定：${body.lockCharacters ? "开启" : "关闭"}\n用户对参考图的补充：${body.referenceNotes?.trim() || "无"}\n参考图片：${image ? "已随请求提供，必须进行视觉理解并用于创作" : "未提供"}\n\n目标模型提示词规则：${modelFormatGuide[body.videoModel] || modelFormatGuide["通用视频模型"]}`
-    : `请生成本次图片提示词。\n\n画面创意：${body.concept.trim()}\n图片用途：${body.purpose}\n视觉风格：${body.style}\n画幅比例：${body.aspect}\n目标图片模型：${body.imageModel}\n用户对参考图的补充：${body.referenceNotes?.trim() || "无"}\n参考图片：${image ? "已随请求提供，必须进行视觉理解并融入提示词" : "未提供"}\n\n提示词应遵循 ${body.imageModel} 的常用表达习惯。negativePrompt 若该模型不建议使用负面提示，则返回说明性短句。`;
+    ? `请完成本次视频创作。\n\n核心创意：${body.idea.trim()}\n题材：${body.genre}\n视觉风格：${body.style}\n成片时长：${body.duration} 秒\n发布平台：${body.platform}\n目标视频模型：${body.videoModel}\n目标镜头数量：${body.duration <= 15 ? 5 : body.duration <= 30 ? 8 : body.duration <= 45 ? 10 : 12}\n角色一致性锁定：${body.lockCharacters ? "开启" : "关闭"}\n用户对参考图的补充：${body.referenceNotes?.trim() || "无"}\n参考图片：${images.length ? "已随请求提供，必须进行视觉理解并用于创作" : "未提供"}\n\n目标模型提示词规则：${modelFormatGuide[body.videoModel] || modelFormatGuide["通用视频模型"]}`
+    : `请生成本次图片提示词。\n\n生成方式：${workflowName}\n画面创意：${body.concept.trim()}\n图片用途：${body.purpose}\n视觉风格：${body.style}\n画幅比例：${body.aspect}\n目标图片模型：${body.imageModel}\n全局融合要求：${body.referenceNotes?.trim().slice(0,800) || "无"}\n参考图片数量：${images.length}\n${referenceManifest||"没有参考图；必须完全根据文字创意进行画面设计。"}\n\n${imageWorkflow==="multi-reference"?"请按编号先逐图分析，再严格按照各自职责提取信息并融合；visualAnalysis 中必须逐一说明每张图贡献的元素以及冲突处理方式。":imageWorkflow==="image-to-image"?"请明确说明源图中被保留的视觉锚点，以及根据新创意被重构的部分。":"请勿声称看见或使用了任何参考图片。"}\n目标模型表达规则：${imageModelFormatGuide[body.imageModel]||"使用具体、连贯、可迁移的自然语言视觉描述，避免无关关键词堆砌。"}\nnegativePrompt 若该模型不建议使用负面提示，则返回说明性短句。`;
 
   const schema = isStory ? storySchema : imagePromptSchema;
   const name = isStory ? "frame_story_package" : "frame_image_prompt";
 
   let result:Awaited<ReturnType<typeof callModel>>;
   try{
-    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isStory?storySystem:imagePromptSystem}\n\n${languageRule}`,prompt,image,schema,schemaName:name,maxTokens:isStory?12000:4000,safetyId:await safetyIdentifier(user.userId)});
+    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isStory?storySystem:imagePromptSystem}\n\n${languageRule}`,prompt,images,schema,schemaName:name,maxTokens:isStory?12000:4000,safetyId:await safetyIdentifier(user.userId)});
   }catch{
     return jsonResponse({error:`${selectedProvider.name} 连接超时或网络不可用，请稍后重试。`},502);
   }
