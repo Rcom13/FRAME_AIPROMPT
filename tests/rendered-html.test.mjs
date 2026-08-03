@@ -132,13 +132,25 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /OrbitControls/);
   assert.match(rig, /intersectObjects/);
   assert.match(rig, /applyPreset/);
-  assert.match(rig, /applyPreset:applyPose/);
+  assert.match(rig, /applyPreset:preset=>\{applyPose\(preset\)/);
   assert.doesNotMatch(rig, /^\s*applyPreset,\s*$/m);
+  assert.match(rig, /capture:\(\)=>apiRef\.current\.capture\(\)/);
+  assert.match(rig, /setRealistic:enabled=>apiRef\.current\.setRealistic\(enabled\)/);
+  assert.match(rig, /solveTwoBone/);
+  assert.match(rig, /applyRealisticDrag/);
+  assert.match(rig, /boneLength\(parent,name\)/);
+  assert.match(rig, /maxBend/);
   assert.match(rig, /toDataURL\("image\/png"\)/);
   assert.match(studio, /class PoseErrorBoundary/);
+  assert.match(studio, /role="switch" aria-checked=\{poseRealistic\}/);
+  assert.match(studio, /function selectPosePreset/);
+  assert.match(studio, /function mirrorCurrentPose/);
+  assert.match(studio, /function resetCurrentPose/);
+  assert.match(studio, /realistic=\{poseRealistic\}/);
   assert.match(packageJson, /"three"/);
   assert.match(css, /\.pose-studio\{/);
   assert.match(css, /\.pose-rig-canvas/);
+  assert.match(css, /\.pose-anatomy-mode\.enabled/);
 });
 
 test("enforces request boundaries on every mutating account and generation API", async () => {
