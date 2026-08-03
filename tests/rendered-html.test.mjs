@@ -67,6 +67,9 @@ test("supports text, single-image, and multi-reference image prompt workflows", 
     assert.match(studio, new RegExp(`"${workflow}"`));
   }
   assert.match(studio, /multiple=\{imageWorkflow==="multi-reference"\}/);
+  assert.match(studio, /imageWorkflow==="text-to-image"&&<><label className="field-label">02 \/ \{t\("imageIdea"\)\}/);
+  assert.match(studio, /concept=workflow==="text-to-image"\?imageConcept\.trim\(\):imageBriefNotes\.trim\(\)/);
+  assert.match(studio, /imageWorkflow==="text-to-image"&&!imageConcept\.trim\(\)/);
   assert.match(studio, /referenceImages:references\.map/);
   assert.match(studio, /referenceRoleLabel\(locale,role\)/);
   assert.match(i18n, /workflowMultiDesc/);
@@ -129,7 +132,10 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /OrbitControls/);
   assert.match(rig, /intersectObjects/);
   assert.match(rig, /applyPreset/);
+  assert.match(rig, /applyPreset:applyPose/);
+  assert.doesNotMatch(rig, /^\s*applyPreset,\s*$/m);
   assert.match(rig, /toDataURL\("image\/png"\)/);
+  assert.match(studio, /class PoseErrorBoundary/);
   assert.match(packageJson, /"three"/);
   assert.match(css, /\.pose-studio\{/);
   assert.match(css, /\.pose-rig-canvas/);

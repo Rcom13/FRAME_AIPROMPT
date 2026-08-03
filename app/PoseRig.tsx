@@ -82,7 +82,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;onPoseChange?:(pose:Joi
     apiRef.current={
       capture:()=>{renderer.render(scene,camera);return renderer.domElement.toDataURL("image/png")},
       reset:()=>applyPose("neutral"),
-      applyPreset,
+      applyPreset:applyPose,
       mirror:()=>{const snapshot=Object.fromEntries(Object.entries(jointMeshes).map(([name,mesh])=>[name,mesh.position.clone()]));Object.entries(jointMeshes).forEach(([name,mesh])=>{const paired=name.endsWith("L")?`${name.slice(0,-1)}R`:name.endsWith("R")?`${name.slice(0,-1)}L`:name;const source=snapshot[paired]||snapshot[name];mesh.position.set(-source.x,source.y,source.z)});updateBones();reportPose()},
     };
     return()=>{cancelAnimationFrame(frame);observer.disconnect();intersectionObserver.disconnect();document.removeEventListener("visibilitychange",onVisibility);renderer.domElement.removeEventListener("pointerdown",onPointerDown);renderer.domElement.removeEventListener("pointermove",onPointerMove);renderer.domElement.removeEventListener("pointerup",onPointerUp);renderer.domElement.removeEventListener("pointercancel",onPointerUp);controls.dispose();jointGeometry.dispose();headGeometry.dispose();bones.forEach(mesh=>{mesh.geometry.dispose();(mesh.material as THREE.Material).dispose()});Object.values(jointMeshes).forEach(mesh=>(mesh.material as THREE.Material).dispose());renderer.dispose();renderer.domElement.remove()};
