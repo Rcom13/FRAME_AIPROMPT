@@ -38,6 +38,15 @@ type ImagePromptRequest = {
   providerConfig?: UserProviderConfig;
 };
 
+type PoseEstimationRequest = {
+  mode: "pose-estimation";
+  locale?: Locale;
+  referenceImage: string;
+  providerConfig?: UserProviderConfig;
+};
+
+const poseJointNames=["head","neck","chest","pelvis","shoulderL","elbowL","wristL","shoulderR","elbowR","wristR","hipL","kneeL","ankleL","hipR","kneeR","ankleR"] as const;
+
 const storySchema = {
   type: "object",
   additionalProperties: false,
@@ -103,6 +112,19 @@ const imagePromptSchema = {
   },
 } as const;
 
+const posePointSchema={
+  type:"object",additionalProperties:false,required:["x","y","z"],
+  properties:{x:{type:"number"},y:{type:"number"},z:{type:"number"}},
+} as const;
+
+const poseEstimationSchema={
+  type:"object",additionalProperties:false,required:["summary","confidence","facing","joints"],
+  properties:{
+    summary:{type:"string"},confidence:{type:"number"},facing:{type:"string",enum:["front","back","left-profile","right-profile","three-quarter","unclear"]},
+    joints:{type:"object",additionalProperties:false,required:poseJointNames,properties:Object.fromEntries(poseJointNames.map(name=>[name,posePointSchema]))},
+  },
+} as const;
+
 const modelFormatGuide: Record<string, string> = {
   "Seedance 2.0": "使用自然、明确的中文分层描述：主体与身份锚点、连续动作、环境变化、景别与运镜、节奏、声音、角色/道具一致性。动作必须可执行，避免关键词堆砌。",
   "Veo 3.1": "按 cinematography + subject + action + context + style/ambiance 组织，并明确原生音频、环境声和必要对白。",
@@ -143,6 +165,18 @@ const imagePromptSystem = `你是一名概念艺术总监和图片模型提示�
 5. 提示词必须贴合目标图片模型的表达习惯，写清主体、动作/状态、环境、构图、镜头、光线、色彩、材质、细节层级及需要避免的内容，并尊重用途与画幅。
 6. visualAnalysis 必须说明本次实际从哪些参考图提取了哪些元素；文生图模式则说明画面设计推导。
 7. 只返回符合 JSON Schema 的结果。`;
+
+const poseEstimationSystem=`你是一名人体动作分析师和 3D 角色绑定师。请从用户上传的单张图片中识别主要人物的全身动作，并输出可映射到 3D 骨骼的标准化关键点。
+
+硬性要求：
+1. 只分析画面中最主要、最完整的人物；忽略服装轮廓、道具和背景造成的假肢体线条。
+2. L/R 始终表示人物自身的左侧与右侧，不是观看者的左右。
+3. pelvis 必须作为坐标原点附近；坐标 x 向画面右侧增大，y 向上增大，z 朝向镜头增大。
+4. 以 pelvis 到 head 的距离约等于 1 个单位进行归一化；脚踝通常位于 y=-1 左右。所有坐标保持在 -2 到 2 范围内。
+5. 根据透视、遮挡和肢体交叠合理估算 z 深度；不要把所有关节机械地放在同一平面。
+6. 即使某个关节被遮挡，也要根据上下游骨段、重心和人体比例补全可信位置；confidence 应反映整套动作的可靠程度，范围 0 到 1。
+7. summary 简短说明人物动作、重心和存在的不确定遮挡；使用用户指定语言。
+8. 只返回符合 JSON Schema 的结果。`;
 
 const jsonResponse=apiReply;
 
@@ -242,14 +276,14 @@ export async function POST(request: Request) {
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"content-generation",30,600);if(limited)return limited;
 
-  let body: StoryRequest | ImagePromptRequest;
+  let body: StoryRequest | ImagePromptRequest | PoseEstimationRequest;
   try {
     body = await readJsonBody(request,42_000_000);
   } catch(error) {
     return error instanceof RequestValidationError?jsonResponse({error:error.message},error.status):jsonResponse({ error: "请求内容格式不正确。" }, 400);
   }
 
-  if (body.mode !== "story" && body.mode !== "image-prompt") {
+  if (body.mode !== "story" && body.mode !== "image-prompt" && body.mode !== "pose-estimation") {
     return jsonResponse({ error: "不支持的生成任务。" }, 400);
   }
 
@@ -267,29 +301,34 @@ export async function POST(request: Request) {
   if(!isSafePublicHttps(baseUrl)||!matchesTrustedProviderHost(baseUrl,providerId==="custom"?"":selectedProvider.baseUrl))return jsonResponse({error:"模型接口必须使用该服务商的安全公网 HTTPS 地址；自定义接口请使用“兼容接口”。"},400);
 
   const isStory = body.mode === "story";
-  const imageWorkflow = isStory ? null : body.imageWorkflow === "image-to-image" || body.imageWorkflow === "multi-reference" ? body.imageWorkflow : "text-to-image";
+  const isPoseEstimation=body.mode==="pose-estimation";
+  const isImagePrompt=body.mode==="image-prompt";
+  const imageWorkflow = isImagePrompt ? body.imageWorkflow === "image-to-image" || body.imageWorkflow === "multi-reference" ? body.imageWorkflow : "text-to-image" : null;
   const suppliedReferences:ReferenceImageInput[] = isStory
     ? body.referenceImage ? [{data:body.referenceImage,name:"story-reference",role:"source"}] : []
-    : Array.isArray(body.referenceImages) ? body.referenceImages : [];
-  const referenceInputs = imageWorkflow === "text-to-image" ? [] : suppliedReferences;
+    : isPoseEstimation
+      ? body.referenceImage ? [{data:body.referenceImage,name:"pose-reference",role:"pose"}] : []
+      : Array.isArray(body.referenceImages) ? body.referenceImages : [];
+  const referenceInputs = isImagePrompt&&imageWorkflow === "text-to-image" ? [] : suppliedReferences;
   const images = referenceInputs.map(item=>item?.data).filter((value):value is string=>typeof value==="string");
-  const maxReferences = isStory ? 1 : 6;
+  const maxReferences = isStory||isPoseEstimation ? 1 : 6;
   const perImageLimit = isStory ? 14_000_000 : 8_000_000;
   if(referenceInputs.length>maxReferences||images.length!==referenceInputs.length||images.some(image=>{const parsed=dataImage(image);return !parsed||!["image/jpeg","image/png","image/webp"].includes(parsed.mediaType)||!/^[a-zA-Z0-9+/=]+$/.test(parsed.data)||image.length>perImageLimit})||images.reduce((total,image)=>total+image.length,0)>36_000_000){
     return jsonResponse({error:"参考图片格式不正确、数量超限或文件过大。"},413);
   }
-  if(!isStory&&imageWorkflow==="image-to-image"&&images.length!==1)return jsonResponse({error:"图生图模式需要且只能上传一张源图。"},400);
-  if(!isStory&&imageWorkflow==="multi-reference"&&(images.length<2||images.length>6))return jsonResponse({error:"多参考图生图模式需要上传 2–6 张参考图。"},400);
+  if(isPoseEstimation&&images.length!==1)return jsonResponse({error:"动作识别需要上传一张人物参考图。"},400);
+  if(isImagePrompt&&imageWorkflow==="image-to-image"&&images.length!==1)return jsonResponse({error:"图生图模式需要且只能上传一张源图。"},400);
+  if(isImagePrompt&&imageWorkflow==="multi-reference"&&(images.length<2||images.length>6))return jsonResponse({error:"多参考图生图模式需要上传 2–6 张参考图。"},400);
 
   const locale:Locale=body.locale&&Object.hasOwn(outputLanguage,body.locale)?body.locale:"zh-CN";
   const languageRule=`本次输出语言：${outputLanguage[locale]}。标题、剧情、分析、镜头、声音与解释字段必须使用该语言；模型专用提示词也使用该语言为主，同时保留目标模型真正需要的英文摄影术语。`;
   if (isStory && (!body.idea?.trim() || body.idea.trim().length > 800)) {
     return jsonResponse({ error: "请提供有效的核心创意。" }, 400);
   }
-  if (!isStory && (!body.concept?.trim() || body.concept.trim().length > 1000)) {
+  if (isImagePrompt && (!body.concept?.trim() || body.concept.trim().length > 1000)) {
     return jsonResponse({ error: "请提供有效的画面创意。" }, 400);
   }
-  const boundedFields=isStory?[body.genre,body.style,body.platform,body.videoModel,body.referenceNotes||""]:[body.purpose,body.style,body.aspect,body.imageModel,body.referenceNotes||""];
+  const boundedFields=isStory?[body.genre,body.style,body.platform,body.videoModel,body.referenceNotes||""]:isImagePrompt?[body.purpose,body.style,body.aspect,body.imageModel,body.referenceNotes||""]:[];
   if(boundedFields.some(value=>typeof value!=="string"||value.length>1000)||(isStory&&(!Number.isFinite(body.duration)||body.duration<5||body.duration>300)))return jsonResponse({error:"创作参数无效或过长。"},400);
 
   const referenceManifest = referenceInputs.map((item,index)=>{
@@ -301,14 +340,16 @@ export async function POST(request: Request) {
   const workflowName=imageWorkflow==="image-to-image"?"图生图（单一源图重构）":imageWorkflow==="multi-reference"?"多参考图生图（逐图提取后融合）":"文生图（纯文字设计）";
   const prompt = isStory
     ? `请完成本次视频创作。\n\n核心创意：${body.idea.trim()}\n题材：${body.genre}\n视觉风格：${body.style}\n成片时长：${body.duration} 秒\n发布平台：${body.platform}\n目标视频模型：${body.videoModel}\n目标镜头数量：${body.duration <= 15 ? 5 : body.duration <= 30 ? 8 : body.duration <= 45 ? 10 : 12}\n角色一致性锁定：${body.lockCharacters ? "开启" : "关闭"}\n用户对参考图的补充：${body.referenceNotes?.trim() || "无"}\n参考图片：${images.length ? "已随请求提供，必须进行视觉理解并用于创作" : "未提供"}\n\n目标模型提示词规则：${modelFormatGuide[body.videoModel] || modelFormatGuide["通用视频模型"]}`
+    : isPoseEstimation
+      ? `请分析随请求提供的动作参考图，识别主要人物的姿态并输出 16 个标准化人体关键点。\n\n图片数量：${images.length}\n坐标约定：pelvis 为原点附近；pelvis 到 head 约为 1；x 向画面右侧、y 向上、z 朝镜头；L/R 为人物自身左右。\n请优先保证骨段连接关系、重心、四肢朝向和遮挡推断合理。`
     : `请生成本次图片提示词。\n\n生成方式：${workflowName}\n画面创意：${body.concept.trim()}\n图片用途：${body.purpose}\n视觉风格：${body.style}\n画幅比例：${body.aspect}\n目标图片模型：${body.imageModel}\n全局融合要求：${body.referenceNotes?.trim().slice(0,800) || "无"}\n参考图片数量：${images.length}\n${referenceManifest||"没有参考图；必须完全根据文字创意进行画面设计。"}\n\n${imageWorkflow==="multi-reference"?"请按编号先逐图分析，再严格按照各自职责提取信息并融合；visualAnalysis 中必须逐一说明每张图贡献的元素以及冲突处理方式。":imageWorkflow==="image-to-image"?"请明确说明源图中被保留的视觉锚点，以及根据新创意被重构的部分。":"请勿声称看见或使用了任何参考图片。"}\n目标模型表达规则：${imageModelFormatGuide[body.imageModel]||"使用具体、连贯、可迁移的自然语言视觉描述，避免无关关键词堆砌。"}\nnegativePrompt 若该模型不建议使用负面提示，则返回说明性短句。`;
 
-  const schema = isStory ? storySchema : imagePromptSchema;
-  const name = isStory ? "frame_story_package" : "frame_image_prompt";
+  const schema = isStory ? storySchema : isPoseEstimation ? poseEstimationSchema : imagePromptSchema;
+  const name = isStory ? "frame_story_package" : isPoseEstimation ? "frame_pose_estimation" : "frame_image_prompt";
 
   let result:Awaited<ReturnType<typeof callModel>>;
   try{
-    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isStory?storySystem:imagePromptSystem}\n\n${languageRule}`,prompt,images,schema,schemaName:name,maxTokens:isStory?12000:4000,safetyId:await safetyIdentifier(user.userId)});
+    result=await callModel({providerId,baseUrl,apiKey,model:generationModel,system:`${isStory?storySystem:isPoseEstimation?poseEstimationSystem:imagePromptSystem}\n\n${languageRule}`,prompt,images,schema,schemaName:name,maxTokens:isStory?12000:isPoseEstimation?3000:4000,safetyId:await safetyIdentifier(user.userId)});
   }catch{
     return jsonResponse({error:`${selectedProvider.name} 连接超时或网络不可用，请稍后重试。`},502);
   }
@@ -320,6 +361,12 @@ export async function POST(request: Request) {
     parsed = JSON.parse(cleanJson(result.text));
   } catch {
     return jsonResponse({ error: `${result.provider.name} 已经响应，但未返回可解析的结构化内容；请更换支持 JSON 输出的模型。` }, 502);
+  }
+
+  if(isPoseEstimation){
+    const pose:Record<string,[number,number,number]>={};
+    for(const name of poseJointNames){const point=parsed?.joints?.[name];if(!point||![point.x,point.y,point.z].every(Number.isFinite))return jsonResponse({error:`${result.provider.name} 已识别图片，但人体关键点不完整；请换一张全身动作更清楚的图片。`},502);pose[name]=[point.x,point.y,point.z].map(value=>Math.max(-2,Math.min(2,value))) as [number,number,number]}
+    return jsonResponse({pose,summary:typeof parsed.summary==="string"?parsed.summary.slice(0,500):"",confidence:Number.isFinite(parsed.confidence)?Math.max(0,Math.min(1,parsed.confidence)):0,facing:typeof parsed.facing==="string"?parsed.facing:"unclear",generatedBy:generationModel,provider:result.provider});
   }
 
   if (isStory) {

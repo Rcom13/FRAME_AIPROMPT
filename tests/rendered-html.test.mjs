@@ -117,9 +117,11 @@ test("stores a separate encrypted image engine and can render real images", asyn
 });
 
 test("provides a manipulable 3D pose rig and pose-guided image rendering", async () => {
-  const [studio, rig, css, packageJson] = await Promise.all([
+  const [studio, rig, presets, generationRoute, css, packageJson] = await Promise.all([
     source("../app/Studio.tsx"),
     source("../app/PoseRig.tsx"),
+    source("../app/pose-presets.ts"),
+    source("../app/api/generate/route.ts"),
     source("../app/globals.css"),
     source("../package.json"),
   ]);
@@ -135,6 +137,7 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /applyPreset:preset=>\{applyPose\(preset\)/);
   assert.doesNotMatch(rig, /^\s*applyPreset,\s*$/m);
   assert.match(rig, /capture:\(\)=>apiRef\.current\.capture\(\)/);
+  assert.match(rig, /applyJointMap:pose=>apiRef\.current\.applyJointMap\(pose\)/);
   assert.match(rig, /setRealistic:enabled=>apiRef\.current\.setRealistic\(enabled\)/);
   assert.match(rig, /solveTwoBone/);
   assert.match(rig, /applyRealisticDrag/);
@@ -147,10 +150,21 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(studio, /function mirrorCurrentPose/);
   assert.match(studio, /function resetCurrentPose/);
   assert.match(studio, /realistic=\{poseRealistic\}/);
+  assert.match(studio, /mode:"pose-estimation"/);
+  assert.match(studio, /estimatePoseFromImage/);
+  assert.match(studio, /POSE_PRESET_LIBRARY\.filter/);
+  assert.match(studio, /poseGender===gender/);
+  assert.match(generationRoute, /poseEstimationSchema/);
+  assert.match(generationRoute, /mode !== "pose-estimation"/);
+  assert.match(generationRoute, /人体关键点不完整/);
+  for(const base of ["relaxed","contrapposto","handsHips","sprint","jump","guard","chair","crossLegged","leanForward","overhead","sideBend","lunge"])assert.match(presets,new RegExp(`"${base}"`));
+  assert.match(presets, /\["female","male"\]/);
   assert.match(packageJson, /"three"/);
   assert.match(css, /\.pose-studio\{/);
   assert.match(css, /\.pose-rig-canvas/);
   assert.match(css, /\.pose-anatomy-mode\.enabled/);
+  assert.match(css, /\.pose-photo-motion/);
+  assert.match(css, /\.pose-subpreset-grid/);
 });
 
 test("enforces request boundaries on every mutating account and generation API", async () => {

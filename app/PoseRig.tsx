@@ -3,27 +3,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { JOINT_NAMES, neutralPose, posePresets, type JointMap, type Point, type PosePreset } from "./pose-presets";
 
-export type PosePreset="neutral"|"action"|"seated"|"reach";
-export type PoseRigHandle={capture:()=>string;reset:()=>void;mirror:()=>void;applyPreset:(preset:PosePreset)=>void;setRealistic:(enabled:boolean)=>void};
-
-type Point=[number,number,number];
-type JointMap=Record<string,Point>;
-
-const neutralPose:JointMap={
-  head:[0,2.85,0],neck:[0,2.25,0],chest:[0,1.55,0],pelvis:[0,.55,0],
-  shoulderL:[-.72,2.02,0],elbowL:[-1.15,1.18,.05],wristL:[-1.25,.28,.12],
-  shoulderR:[.72,2.02,0],elbowR:[1.15,1.18,.05],wristR:[1.25,.28,.12],
-  hipL:[-.42,.48,0],kneeL:[-.48,-.78,.08],ankleL:[-.5,-2.05,.05],
-  hipR:[.42,.48,0],kneeR:[.48,-.78,.08],ankleR:[.5,-2.05,.05],
-};
-
-const presets:Record<PosePreset,Partial<JointMap>>={
-  neutral:{},
-  action:{head:[-.1,2.82,.08],neck:[0,2.23,0],chest:[.08,1.5,.04],pelvis:[-.12,.52,0],shoulderL:[-.7,1.98,.1],elbowL:[-1.48,1.62,.25],wristL:[-1.82,.92,.35],shoulderR:[.78,2.02,-.05],elbowR:[1.2,1.12,-.5],wristR:[.62,.62,-.65],hipL:[-.45,.45,.06],kneeL:[-.95,-.55,.5],ankleL:[-1.42,-1.55,.6],hipR:[.38,.47,-.02],kneeR:[.64,-.82,-.32],ankleR:[.82,-2.02,-.12]},
-  seated:{head:[0,2.2,.08],neck:[0,1.68,0],chest:[0,1.02,0],pelvis:[0,.05,0],shoulderL:[-.68,1.48,0],elbowL:[-.92,.67,.42],wristL:[-.48,.1,.72],shoulderR:[.68,1.48,0],elbowR:[.92,.67,.42],wristR:[.48,.1,.72],hipL:[-.4,0,0],kneeL:[-.55,-.85,.95],ankleL:[-.58,-1.85,.88],hipR:[.4,0,0],kneeR:[.55,-.85,.95],ankleR:[.58,-1.85,.88]},
-  reach:{head:[.08,2.82,.05],neck:[0,2.22,0],chest:[0,1.52,0],pelvis:[-.08,.52,0],shoulderL:[-.7,2.01,0],elbowL:[-1.1,1.35,.25],wristL:[-.98,.55,.55],shoulderR:[.72,2.05,0],elbowR:[1.05,2.75,.12],wristR:[.82,3.55,.2],hipL:[-.43,.45,0],kneeL:[-.55,-.78,.1],ankleL:[-.62,-2.04,.05],hipR:[.38,.48,0],kneeR:[.72,-.72,-.18],ankleR:[.88,-1.96,-.12]},
-};
+export type PoseRigHandle={capture:()=>string;reset:()=>void;mirror:()=>void;applyPreset:(preset:PosePreset)=>void;applyJointMap:(pose:JointMap)=>void;setRealistic:(enabled:boolean)=>void};
 
 const bonePairs:[string,string][]=[
   ["head","neck"],["neck","chest"],["chest","pelvis"],
@@ -51,7 +33,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;realistic:boolean;onPos
   const mountRef=useRef<HTMLDivElement>(null);
   const realisticRef=useRef(realistic);
   const onPoseChangeRef=useRef(onPoseChange);
-  const apiRef=useRef<PoseRigHandle>({capture:()=>"",reset:()=>{},mirror:()=>{},applyPreset:()=>{},setRealistic:()=>{}});
+  const apiRef=useRef<PoseRigHandle>({capture:()=>"",reset:()=>{},mirror:()=>{},applyPreset:()=>{},applyJointMap:()=>{},setRealistic:()=>{}});
   useEffect(()=>{realisticRef.current=realistic},[realistic]);
   useEffect(()=>{onPoseChangeRef.current=onPoseChange},[onPoseChange]);
   useImperativeHandle(ref,()=>({
@@ -59,6 +41,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;realistic:boolean;onPos
     reset:()=>apiRef.current.reset(),
     mirror:()=>apiRef.current.mirror(),
     applyPreset:preset=>apiRef.current.applyPreset(preset),
+    applyJointMap:pose=>apiRef.current.applyJointMap(pose),
     setRealistic:enabled=>apiRef.current.setRealistic(enabled),
   }),[]);
 
@@ -86,7 +69,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;realistic:boolean;onPos
     const up=new THREE.Vector3(0,1,0);
     const updateBones=()=>{bones.forEach(mesh=>{const a=jointMeshes[mesh.userData.from].position;const b=jointMeshes[mesh.userData.to].position;const delta=new THREE.Vector3().subVectors(b,a);mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.scale.set(1,delta.length(),1);mesh.quaternion.setFromUnitVectors(up,delta.clone().normalize())})};
     const reportPose=()=>{const value=Object.fromEntries(Object.entries(jointMeshes).map(([name,mesh])=>[name,[mesh.position.x,mesh.position.y,mesh.position.z] as Point])) as JointMap;onPoseChangeRef.current?.(value)};
-    const applyPose=(preset:PosePreset)=>{const pose=clonePose(neutralPose);Object.entries(presets[preset]).forEach(([name,point])=>{if(point)pose[name]=[...point] as Point});Object.entries(pose).forEach(([name,point])=>jointMeshes[name].position.set(...point));updateBones();reportPose()};
+    const applyPose=(preset:PosePreset)=>{const pose=clonePose(neutralPose);Object.entries(posePresets[preset]).forEach(([name,point])=>{if(point)pose[name]=[...point] as Point});Object.entries(pose).forEach(([name,point])=>jointMeshes[name].position.set(...point));updateBones();reportPose()};
     const boneLength=(from:string,to:string)=>new THREE.Vector3(...neutralPose[to]).distanceTo(new THREE.Vector3(...neutralPose[from]));
     const restDirection=(name:string)=>{const parent=parentByJoint[name];return new THREE.Vector3(...neutralPose[name]).sub(new THREE.Vector3(...neutralPose[parent])).normalize()};
     const limitDirection=(direction:THREE.Vector3,preferred:THREE.Vector3,maxDegrees:number)=>{
@@ -103,6 +86,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;realistic:boolean;onPos
     const childrenByJoint=Object.entries(parentByJoint).reduce<Record<string,string[]>>((result,[child,parent])=>{(result[parent]??=[]).push(child);return result},{});
     const moveDescendants=(name:string,delta:THREE.Vector3)=>{for(const child of childrenByJoint[name]||[]){jointMeshes[child].position.add(delta);moveDescendants(child,delta)}};
     const normalizeRig=()=>{const targets=Object.fromEntries(Object.entries(jointMeshes).map(([name,mesh])=>[name,mesh.position.clone()])) as Record<string,THREE.Vector3>;jointMeshes.pelvis.position.set(THREE.MathUtils.clamp(targets.pelvis.x,-1.5,1.5),THREE.MathUtils.clamp(targets.pelvis.y,-.2,1.3),THREE.MathUtils.clamp(targets.pelvis.z,-1.2,1.2));for(const name of ["chest","neck","head","shoulderL","shoulderR","hipL","hipR"])jointMeshes[name].position.copy(projectFromParent(name,targets[name]));solveTwoBone("shoulderL","elbowL","wristL",targets.wristL,155);solveTwoBone("shoulderR","elbowR","wristR",targets.wristR,155);solveTwoBone("hipL","kneeL","ankleL",targets.ankleL,150);solveTwoBone("hipR","kneeR","ankleR",targets.ankleR,150);updateBones();reportPose()};
+    const applyJointMap=(pose:JointMap)=>{if(!JOINT_NAMES.every(name=>Array.isArray(pose[name])&&pose[name].length===3&&pose[name].every(Number.isFinite)))return;const sourcePelvis=new THREE.Vector3(...pose.pelvis);const sourceHead=new THREE.Vector3(...pose.head);const scale=THREE.MathUtils.clamp(2.3/Math.max(.3,sourceHead.distanceTo(sourcePelvis)),.8,5);for(const name of JOINT_NAMES){const source=new THREE.Vector3(...pose[name]).sub(sourcePelvis).multiplyScalar(scale);jointMeshes[name].position.set(source.x,source.y+.55,source.z)}if(realisticRef.current)normalizeRig();else{updateBones();reportPose()}};
     const applyRealisticDrag=(name:string,target:THREE.Vector3)=>{
       if(name==="pelvis"){const next=new THREE.Vector3(THREE.MathUtils.clamp(target.x,-1.5,1.5),THREE.MathUtils.clamp(target.y,-.2,1.3),THREE.MathUtils.clamp(target.z,-1.2,1.2));const delta=next.sub(jointMeshes.pelvis.position);jointMeshes.pelvis.position.add(delta);moveDescendants("pelvis",delta);return}
       const chain=chainEnds[name];if(chain){solveTwoBone(chain[0],chain[1],name,target,chain[2]);return}
@@ -127,6 +111,7 @@ const PoseRig=forwardRef<PoseRigHandle,{ariaLabel:string;realistic:boolean;onPos
       capture:()=>{renderer.render(scene,camera);return renderer.domElement.toDataURL("image/png")},
       reset:()=>{applyPose("neutral");if(realisticRef.current)normalizeRig()},
       applyPreset:preset=>{applyPose(preset);if(realisticRef.current)normalizeRig()},
+      applyJointMap,
       mirror:()=>{const snapshot=Object.fromEntries(Object.entries(jointMeshes).map(([name,mesh])=>[name,mesh.position.clone()]));Object.entries(jointMeshes).forEach(([name,mesh])=>{const paired=name.endsWith("L")?`${name.slice(0,-1)}R`:name.endsWith("R")?`${name.slice(0,-1)}L`:name;const source=snapshot[paired]||snapshot[name];mesh.position.set(-source.x,source.y,source.z)});updateBones();reportPose()},
       setRealistic:(enabled:boolean)=>{realisticRef.current=enabled;if(enabled)normalizeRig()},
     };
