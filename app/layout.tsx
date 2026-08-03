@@ -13,18 +13,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FRAME｜AI 视频剧情与分镜工作台",
-  description: "将灵感快速转化为剧情大纲、分镜脚本与 AI 视频生成提示词。",
+  title: "FRAME｜AI 故事、图片与 3D 姿态创作工作台",
+  description: "从剧情分镜、图片提示词到真实图片生成与 3D 人物姿态设计，让创意直接进入 AI 生产流程。",
   openGraph: {
-    title: "FRAME｜让灵感，成为影片。",
-    description: "AI 剧情 · 分镜 · 视频提示词",
-    images: ["https://story-forge-cn.rjins.chatgpt.site/og.png"],
+    title: "FRAME｜AI CREATIVE OS",
+    description: "AI 剧情 · 图片提示词 · 图片生成 · 3D 姿态设计",
+    images: ["https://story-forge-cn.rjins.chatgpt.site/og-v2.png"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "FRAME｜让灵感，成为影片。",
-    description: "AI 剧情 · 分镜 · 视频提示词",
-    images: ["https://story-forge-cn.rjins.chatgpt.site/og.png"],
+    title: "FRAME｜AI CREATIVE OS",
+    description: "AI 剧情 · 图片提示词 · 图片生成 · 3D 姿态设计",
+    images: ["https://story-forge-cn.rjins.chatgpt.site/og-v2.png"],
   },
 };
 

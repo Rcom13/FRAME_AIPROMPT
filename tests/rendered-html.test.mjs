@@ -90,7 +90,8 @@ test("stores a separate encrypted image engine and can render real images", asyn
     source("../app/globals.css"),
   ]);
 
-  assert.match(studio, /directImageEnabled/);
+  assert.match(studio, /workspaceMode==="generate"/);
+  assert.match(studio, /generateImagePrompt\(true\)/);
   assert.match(studio, /fetch\("\/api\/generate-image"/);
   assert.match(studio, /downloadGeneratedImage/);
   assert.match(studio, /generated-artwork/);
@@ -108,6 +109,28 @@ test("stores a separate encrypted image engine and can render real images", asyn
   assert.match(generationRoute, /\/interactions/);
   assert.match(generationRoute, /\/text_to_image/);
   assert.match(generationRoute, /pollToken/);
-  assert.match(css, /\.direct-image-toggle\{/);
+  assert.match(css, /\.render-studio/);
   assert.match(css, /\.image-render-mask\{/);
+});
+
+test("provides a manipulable 3D pose rig and pose-guided image rendering", async () => {
+  const [studio, rig, css, packageJson] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/PoseRig.tsx"),
+    source("../app/globals.css"),
+    source("../package.json"),
+  ]);
+
+  assert.match(studio, /workspaceMode==="pose"/);
+  assert.match(studio, /lazy\(\(\)=>import\("\.\/PoseRig"\)\)/);
+  assert.match(studio, /poseRigRef\.current\?\.capture\(\)/);
+  assert.match(studio, /role:"composition"/);
+  assert.match(studio, /generatePoseImage/);
+  assert.match(rig, /OrbitControls/);
+  assert.match(rig, /intersectObjects/);
+  assert.match(rig, /applyPreset/);
+  assert.match(rig, /toDataURL\("image\/png"\)/);
+  assert.match(packageJson, /"three"/);
+  assert.match(css, /\.pose-studio\{/);
+  assert.match(css, /\.pose-rig-canvas/);
 });
