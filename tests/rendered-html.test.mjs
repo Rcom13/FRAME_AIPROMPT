@@ -152,6 +152,9 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /installDetailedBody/);
   assert.match(rig, /deformDetailedBody/);
   assert.match(rig, /pose-\$\{gender\}\.obj/);
+  assert.match(rig, /sourceBodyPose=\(gender:PoseGender\)=>restPose\(gender\)/);
+  assert.match(rig, /leftArm=\[3,4,5\],rightArm=\[6,7,8\],leftLeg=\[9,10,11\],rightLeg=\[12,13,14\]/);
+  assert.match(rig, /point\.x<0\?leftLeg:rightLeg/);
   assert.match(rig, /conformToTargets/);
   assert.match(rig, /toDataURL\("image\/png"\)/);
   assert.match(studio, /class PoseErrorBoundary/);
