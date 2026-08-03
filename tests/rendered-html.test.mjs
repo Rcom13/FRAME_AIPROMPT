@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 
 const source = path => readFile(new URL(path, import.meta.url), "utf8");
@@ -147,6 +147,11 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /addPerson:gender/);
   assert.match(rig, /setBodyType:gender/);
   assert.match(rig, /whiteMaterial/);
+  assert.match(rig, /OBJLoader/);
+  assert.match(rig, /mergeVertices/);
+  assert.match(rig, /installDetailedBody/);
+  assert.match(rig, /deformDetailedBody/);
+  assert.match(rig, /pose-\$\{gender\}\.obj/);
   assert.match(rig, /conformToTargets/);
   assert.match(rig, /toDataURL\("image\/png"\)/);
   assert.match(studio, /class PoseErrorBoundary/);
@@ -180,6 +185,10 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(css, /\.pose-photo-motion/);
   assert.match(css, /\.pose-subpreset-grid/);
   assert.match(css, /\.pose-people-manager/);
+  for(const model of ["pose-female.obj","pose-male.obj"]){
+    const asset=await stat(new URL(`../public/models/${model}`,import.meta.url));
+    assert.ok(asset.size>1_000_000,`${model} should contain the extracted high-detail body mesh`);
+  }
 });
 
 test("connects Story, Prompt, Render, and Pose into a production pipeline", async () => {
