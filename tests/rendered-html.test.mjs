@@ -134,15 +134,20 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /OrbitControls/);
   assert.match(rig, /intersectObjects/);
   assert.match(rig, /applyPreset/);
-  assert.match(rig, /applyPreset:preset=>\{applyPose\(preset\)/);
+  assert.match(rig, /applyPreset:preset=>\{const rig=activeRig\(\);if\(rig\)applyPose\(rig,preset\)/);
   assert.doesNotMatch(rig, /^\s*applyPreset,\s*$/m);
   assert.match(rig, /capture:\(\)=>apiRef\.current\.capture\(\)/);
-  assert.match(rig, /applyJointMap:pose=>apiRef\.current\.applyJointMap\(pose\)/);
-  assert.match(rig, /setRealistic:enabled=>apiRef\.current\.setRealistic\(enabled\)/);
+  assert.match(rig, /applyJointMap:value=>apiRef\.current\.applyJointMap\(value\)/);
+  assert.match(rig, /setRealistic:value=>apiRef\.current\.setRealistic\(value\)/);
   assert.match(rig, /solveTwoBone/);
-  assert.match(rig, /applyRealisticDrag/);
-  assert.match(rig, /boneLength\(parent,name\)/);
+  assert.match(rig, /realisticDrag/);
+  assert.match(rig, /boneLength\(rig,parent,name\)/);
   assert.match(rig, /maxBend/);
+  assert.match(rig, /createCharacter/);
+  assert.match(rig, /addPerson:gender/);
+  assert.match(rig, /setBodyType:gender/);
+  assert.match(rig, /whiteMaterial/);
+  assert.match(rig, /conformToTargets/);
   assert.match(rig, /toDataURL\("image\/png"\)/);
   assert.match(studio, /class PoseErrorBoundary/);
   assert.match(studio, /role="switch" aria-checked=\{poseRealistic\}/);
@@ -154,6 +159,8 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(studio, /estimatePoseFromImage/);
   assert.match(studio, /POSE_PRESET_LIBRARY\.filter/);
   assert.match(studio, /poseGender===gender/);
+  assert.match(studio, /posePeople\.map/);
+  assert.match(studio, /poseLowConfidence/);
   assert.match(generationRoute, /poseEstimationSchema/);
   assert.match(generationRoute, /mode !== "pose-estimation"/);
   assert.match(generationRoute, /人体关键点不完整/);
@@ -165,6 +172,23 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(css, /\.pose-anatomy-mode\.enabled/);
   assert.match(css, /\.pose-photo-motion/);
   assert.match(css, /\.pose-subpreset-grid/);
+  assert.match(css, /\.pose-people-manager/);
+});
+
+test("uses a model-backed idea mentor and removes local story templates", async () => {
+  const [studio, generationRoute, css] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/api/generate/route.ts"),
+    source("../app/globals.css"),
+  ]);
+  assert.match(studio, /mode:"idea-mentor"/);
+  assert.match(studio, /askIdeaMentor/);
+  assert.match(studio, /switchWorkspace/);
+  assert.doesNotMatch(studio, /genreProfiles|styleProfiles|buildStory|buildShots|const ideas/);
+  assert.match(generationRoute, /ideaMentorSchema/);
+  assert.match(generationRoute, /mode !== "idea-mentor"/);
+  assert.match(css, /::view-transition-new\(studio-workspace\)/);
+  assert.match(css, /\.mentor-suggestion/);
 });
 
 test("enforces request boundaries on every mutating account and generation API", async () => {
