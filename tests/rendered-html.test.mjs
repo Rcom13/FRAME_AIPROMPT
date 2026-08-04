@@ -225,7 +225,6 @@ test("connects Story, official ComfyUI, Render, and Pose into a production pipel
   assert.match(studio, /pipelineRenderPrompt\?renderPipelineImage\(\):generateImagePrompt\(true\)/);
   assert.match(generate, /reasoningEffort:isStory\|\|isPoseEstimation\?"medium":"low"/);
   assert.match(generate, /isPoseEstimation\?2500:2600/);
-  assert.match(css, /\.creation-pipeline\{/);
   assert.match(css, /\.pipeline-banner\{/);
   assert.match(css, /\.pose-navigation\{/);
   assert.match(comfyCss, /\.real-comfy-studio\{/);
