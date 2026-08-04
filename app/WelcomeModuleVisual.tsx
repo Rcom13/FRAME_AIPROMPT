@@ -2,6 +2,7 @@ type WelcomeVisual = "story" | "workflow" | "render" | "pose";
 
 export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
   if (type === "story") return <div className="module-visual portal-preview story-preview" aria-hidden="true">
+    <div className="preview-stage">
     <span className="preview-grid" />
     <div className="story-reel">
       <i className="story-frame frame-one"><b>01</b><span /><em>WIDE</em></i>
@@ -11,9 +12,11 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
     </div>
     <span className="story-playhead" />
     <div className="preview-hud"><span><i /> NARRATIVE SEQUENCE</span><b>00:24:08</b></div>
+    </div>
   </div>;
 
   if (type === "workflow") return <div className="module-visual portal-preview workflow-preview" aria-hidden="true">
+    <div className="preview-stage">
     <span className="preview-grid" />
     <i className="graph-link link-one"><b /></i>
     <i className="graph-link link-two"><b /></i>
@@ -23,18 +26,22 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
     <div className="graph-node node-output"><i /><span><b>OUTPUT</b><small>PREVIEW</small></span><em /></div>
     <div className="graph-minimap"><i /><i /><i /></div>
     <div className="preview-hud"><span><i /> GRAPH ONLINE</span><b>3 NODES · 3 LINKS</b></div>
+    </div>
   </div>;
 
   if (type === "render") return <div className="module-visual portal-preview render-preview" aria-hidden="true">
+    <div className="preview-stage">
     <span className="preview-grid" />
     <div className="render-layers"><i /><i /><i /></div>
     <div className="render-frame"><span className="render-sun" /><span className="render-horizon" /><span className="render-subject" /><b className="render-scan" /></div>
     <div className="render-aperture"><i /><i /><i /></div>
     <div className="render-meter"><i /><i /><i /><i /><i /></div>
     <div className="preview-hud"><span><i /> SYNTHESIS ACTIVE</span><b>1536 × 1024</b></div>
+    </div>
   </div>;
 
   return <div className="module-visual portal-preview pose-preview" aria-hidden="true">
+    <div className="preview-stage">
     <span className="preview-grid" />
     <div className="pose-orbit orbit-one" /><div className="pose-orbit orbit-two" />
     <div className="preview-rig">
@@ -53,5 +60,6 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
     </div>
     <div className="pose-axis"><i>X</i><i>Y</i><i>Z</i></div>
     <div className="preview-hud"><span><i /> HUMAN RIG ACTIVE</span><b>14 JOINTS · IK</b></div>
+    </div>
   </div>;
 }
