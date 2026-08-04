@@ -1,81 +1,54 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ComfyConnectionSettings, { COMFY_CONFIG_EVENT, readComfyConfig, type ComfyConfigSummary } from "./ComfyConnectionSettings";
 import type { Locale } from "./i18n";
-
-const COMFY_CLOUD_URL = "https://cloud.comfy.org/";
 
 const COPY = {
   "zh-CN": {
-    title: "真正的 ComfyUI，直接进入工作区。",
-    intro: "02 不再模拟节点。这里载入官方 ComfyUI 前端或你自己的完整 ComfyUI 页面，节点、模型、队列、历史、Manager 与扩展均由真实服务提供。",
-    cloud: "Comfy Cloud",
-    self: "自托管 / 本机",
-    endpoint: "ComfyUI 页面地址",
-    connect: "载入完整编辑器",
-    open: "新窗口打开",
-    reload: "重新载入",
-    loaded: "真实 ComfyUI 编辑器已载入",
-    loading: "正在载入官方 ComfyUI…",
-    invalid: "请输入有效的 HTTPS 地址；本机仅允许 localhost 或 127.0.0.1。",
-    localOnly: "浏览器会阻止 HTTPS 网站嵌入本机 HTTP 页面。请用新窗口打开本机 ComfyUI，完整功能不会受影响。",
-    frameHelp: "如果登录页或画布没有出现，请先在新窗口完成登录，再点“重新载入”。",
-    official: "官方完整前端",
-    manager: "Manager 与自定义节点由所连接的 ComfyUI 服务提供",
-    cloudHint: "无需在 FRAME 内配置 API Key；Comfy Cloud 登录与用量由 Comfy 官方页面处理。",
-    selfHint: "推荐使用 HTTPS 的远程 ComfyUI。http://127.0.0.1:8188 可在新窗口正常使用。",
-    bridge: "来自 01 STORY 的创作内容已就绪",
+    title: "官方 ComfyUI，运行在 FRAME 内。",
+    intro: "02 现在使用 GitHub 官方前端构建，不再嵌入 Comfy Cloud 登录页，也不再模拟节点。连接后端后，节点、模型、队列、历史和 Manager 都来自真实 ComfyUI。",
+    official: "COMFYUI FRONTEND v1.50.0",
+    source: "官方 GPL-3.0 源码构建",
+    configured: "执行后端已验证",
+    setupTitle: "先连接一个真正的 ComfyUI 后端",
+    setupDesc: "画布属于前端；节点定义、模型和图片生成来自后端。配置 Comfy Cloud API 或公网 HTTPS ComfyUI 后即可进入完整编辑器。",
+    configure: "连接设置",
+    hideConfig: "收起设置",
+    reload: "重载画布",
+    fullscreen: "全屏编辑",
+    loading: "正在启动官方 ComfyUI 前端…",
+    connecting: "官方前端已启动，正在读取真实节点与模型",
+    privacy: "密钥只在 FRAME 服务端解密并转发，不会交给画布脚本。",
+    bridge: "来自 01 STORY 的内容已就绪",
     copyPrompt: "复制镜头提示词",
-    downloadWorkflow: "下载基础工作流",
+    downloadWorkflow: "下载可导入工作流",
     copied: "提示词已复制，可粘贴到 CLIP Text Encode 节点",
-    downloaded: "基础工作流已下载，把 JSON 拖入 ComfyUI 画布即可",
+    downloaded: "工作流已下载，把 JSON 拖入官方画布即可",
     noPrompt: "尚未接收 01 STORY 内容",
-    privacy: "FRAME 不读取 iframe 内的账号、工作流、模型或密钥。",
+    backendCloud: "COMFY CLOUD API",
+    backendRemote: "REMOTE COMFYUI",
+    license: "第三方许可与源码",
   },
   "zh-TW": {
-    title: "真正的 ComfyUI，直接進入工作區。",
-    intro: "02 不再模擬節點。這裡載入官方 ComfyUI 前端或你自己的完整 ComfyUI 頁面，節點、模型、佇列、歷史、Manager 與擴充均由真實服務提供。",
-    cloud: "Comfy Cloud", self: "自架 / 本機", endpoint: "ComfyUI 頁面位址", connect: "載入完整編輯器", open: "新視窗開啟", reload: "重新載入", loaded: "真實 ComfyUI 編輯器已載入", loading: "正在載入官方 ComfyUI…", invalid: "請輸入有效的 HTTPS 位址；本機僅允許 localhost 或 127.0.0.1。", localOnly: "瀏覽器會阻止 HTTPS 網站嵌入本機 HTTP 頁面。請用新視窗開啟本機 ComfyUI，完整功能不受影響。", frameHelp: "若登入頁或畫布沒有出現，請先在新視窗完成登入，再按重新載入。", official: "官方完整前端", manager: "Manager 與自訂節點由所連接的 ComfyUI 服務提供", cloudHint: "不需在 FRAME 內設定 API Key；Comfy Cloud 登入與用量由官方頁面處理。", selfHint: "建議使用 HTTPS 遠端 ComfyUI。http://127.0.0.1:8188 可在新視窗正常使用。", bridge: "來自 01 STORY 的創作內容已就緒", copyPrompt: "複製鏡頭提示詞", downloadWorkflow: "下載基礎工作流", copied: "提示詞已複製，可貼入 CLIP Text Encode 節點", downloaded: "基礎工作流已下載，把 JSON 拖入 ComfyUI 畫布即可", noPrompt: "尚未接收 01 STORY 內容", privacy: "FRAME 不會讀取 iframe 內的帳號、工作流、模型或密鑰。",
+    title: "官方 ComfyUI，運行於 FRAME 內。", intro: "02 現在使用 GitHub 官方前端建置，不再嵌入 Cloud 登入頁，也不再模擬節點。連接後端後，節點、模型、佇列、歷史與 Manager 均來自真實 ComfyUI。", official: "COMFYUI FRONTEND v1.50.0", source: "官方 GPL-3.0 原始碼建置", configured: "執行後端已驗證", setupTitle: "先連接真正的 ComfyUI 後端", setupDesc: "畫布屬於前端；節點、模型與生成來自後端。設定 Comfy Cloud API 或公開 HTTPS ComfyUI 後即可進入完整編輯器。", configure: "連線設定", hideConfig: "收起設定", reload: "重載畫布", fullscreen: "全螢幕編輯", loading: "正在啟動官方 ComfyUI 前端…", connecting: "官方前端已啟動，正在讀取真實節點與模型", privacy: "密鑰只在 FRAME 伺服器解密轉發，不會交給畫布腳本。", bridge: "來自 01 STORY 的內容已就緒", copyPrompt: "複製鏡頭提示詞", downloadWorkflow: "下載可匯入工作流", copied: "提示詞已複製，可貼入 CLIP Text Encode 節點", downloaded: "工作流已下載，把 JSON 拖入官方畫布即可", noPrompt: "尚未接收 01 STORY 內容", backendCloud: "COMFY CLOUD API", backendRemote: "REMOTE COMFYUI", license: "第三方授權與原始碼",
   },
   ja: {
-    title: "本物の ComfyUI ワークスペース。",
-    intro: "02 はノードを模倣しません。公式 ComfyUI または自分の ComfyUI ページを読み込み、ノード、モデル、キュー、履歴、Manager、拡張機能をそのまま利用します。",
-    cloud: "Comfy Cloud", self: "セルフホスト / ローカル", endpoint: "ComfyUI ページ URL", connect: "フルエディターを読込", open: "新しいウィンドウ", reload: "再読込", loaded: "ComfyUI エディターを読み込みました", loading: "公式 ComfyUI を読み込み中…", invalid: "有効な HTTPS URL を入力してください。ローカルは localhost / 127.0.0.1 のみ許可されます。", localOnly: "HTTPS ページ内にローカル HTTP は埋め込めません。新しいウィンドウでローカル ComfyUI を開いてください。", frameHelp: "ログインまたはキャンバスが表示されない場合は、新しいウィンドウでログインしてから再読込してください。", official: "公式フルフロントエンド", manager: "Manager とカスタムノードは接続先 ComfyUI が提供します", cloudHint: "FRAME に API Key は不要です。Cloud のログインと使用量は Comfy 公式ページで管理されます。", selfHint: "HTTPS のリモート ComfyUI を推奨します。http://127.0.0.1:8188 は新しいウィンドウで利用できます。", bridge: "01 STORY の内容を受け取りました", copyPrompt: "ショットプロンプトをコピー", downloadWorkflow: "基本ワークフローを保存", copied: "コピーしました。CLIP Text Encode に貼り付けてください", downloaded: "JSON を保存しました。ComfyUI キャンバスへドロップしてください", noPrompt: "01 STORY の内容はまだありません", privacy: "FRAME は iframe 内のアカウント、ワークフロー、モデル、キーを読み取りません。",
+    title: "公式 ComfyUI を FRAME 内で実行。", intro: "02 は GitHub の公式フロントエンドを同一オリジンで実行します。Cloud ログインの埋め込みや模擬ノードは使いません。接続後、ノード、モデル、キュー、履歴、Manager は実際の ComfyUI から読み込まれます。", official: "COMFYUI FRONTEND v1.50.0", source: "公式 GPL-3.0 ソースからビルド", configured: "実行バックエンド確認済み", setupTitle: "ComfyUI バックエンドを接続", setupDesc: "キャンバスはフロントエンド、ノードとモデルと生成はバックエンドです。Cloud API または公開 HTTPS ComfyUI を設定してください。", configure: "接続設定", hideConfig: "設定を閉じる", reload: "キャンバス再読込", fullscreen: "全画面編集", loading: "公式 ComfyUI を起動中…", connecting: "公式フロントエンドを起動し、ノードとモデルを読込中", privacy: "キーは FRAME サーバー内でのみ復号・転送され、キャンバスには渡りません。", bridge: "01 STORY の内容を受け取りました", copyPrompt: "プロンプトをコピー", downloadWorkflow: "ワークフローを保存", copied: "CLIP Text Encode に貼り付けられます", downloaded: "JSON を公式キャンバスへドロップしてください", noPrompt: "01 STORY の内容はまだありません", backendCloud: "COMFY CLOUD API", backendRemote: "REMOTE COMFYUI", license: "ライセンスとソース",
   },
   en: {
-    title: "The real ComfyUI workspace, inside FRAME.",
-    intro: "Module 02 no longer imitates nodes. It loads the official ComfyUI frontend or your own complete ComfyUI page, with real nodes, models, queue, history, Manager, and extensions.",
-    cloud: "Comfy Cloud", self: "Self-hosted / local", endpoint: "ComfyUI page URL", connect: "Load full editor", open: "Open in new window", reload: "Reload", loaded: "Real ComfyUI editor loaded", loading: "Loading official ComfyUI…", invalid: "Enter a valid HTTPS URL. Local HTTP is limited to localhost or 127.0.0.1.", localOnly: "Browsers block local HTTP pages inside an HTTPS site. Open local ComfyUI in a new window for full functionality.", frameHelp: "If the login or canvas does not appear, sign in in a new window first, then reload.", official: "Official full frontend", manager: "Manager and custom nodes come from the connected ComfyUI service", cloudHint: "No API key is stored in FRAME. Comfy Cloud handles sign-in and usage in the official page.", selfHint: "A remote HTTPS ComfyUI is recommended. http://127.0.0.1:8188 works in a new window.", bridge: "Creative content from 01 STORY is ready", copyPrompt: "Copy shot prompt", downloadWorkflow: "Download starter workflow", copied: "Copied. Paste it into a CLIP Text Encode node", downloaded: "Starter JSON downloaded. Drop it onto the ComfyUI canvas", noPrompt: "No content received from 01 STORY", privacy: "FRAME cannot read accounts, workflows, models, or keys inside the iframe.",
+    title: "Official ComfyUI, running inside FRAME.", intro: "Module 02 now runs the GitHub-built official frontend same-origin. It no longer embeds the Cloud login or imitates nodes. Once connected, nodes, models, queue, history, and Manager come from a real ComfyUI backend.", official: "COMFYUI FRONTEND v1.50.0", source: "Built from the official GPL-3.0 source", configured: "Execution backend verified", setupTitle: "Connect a real ComfyUI backend first", setupDesc: "The canvas is the frontend; node definitions, models, and generation come from the backend. Configure the Cloud API or a public HTTPS ComfyUI to enter the full editor.", configure: "Connection settings", hideConfig: "Hide settings", reload: "Reload canvas", fullscreen: "Fullscreen editor", loading: "Starting the official ComfyUI frontend…", connecting: "Official frontend started; loading real nodes and models", privacy: "Secrets are decrypted and forwarded only on the FRAME server, never exposed to canvas scripts.", bridge: "Content from 01 STORY is ready", copyPrompt: "Copy shot prompt", downloadWorkflow: "Download importable workflow", copied: "Copied; paste into a CLIP Text Encode node", downloaded: "Workflow downloaded; drop the JSON onto the official canvas", noPrompt: "No content received from 01 STORY", backendCloud: "COMFY CLOUD API", backendRemote: "REMOTE COMFYUI", license: "Third-party license and source",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
 export function comfyModuleCopy(locale: Locale) {
   return locale === "zh-CN"
-    ? { desc: "直接使用官方 ComfyUI 完整画布、节点、模型、Manager 与扩展。", enter: "进入真实 ComfyUI" }
+    ? { desc: "内置 GitHub 官方 ComfyUI 前端，连接真实节点、模型、Manager 与执行队列。", enter: "进入官方 ComfyUI" }
     : locale === "zh-TW"
-      ? { desc: "直接使用官方 ComfyUI 完整畫布、節點、模型、Manager 與擴充。", enter: "進入真正 ComfyUI" }
+      ? { desc: "內置 GitHub 官方 ComfyUI 前端，連接真實節點、模型、Manager 與執行佇列。", enter: "進入官方 ComfyUI" }
       : locale === "ja"
-        ? { desc: "公式 ComfyUI のキャンバス、ノード、モデル、Manager、拡張をそのまま使用します。", enter: "ComfyUI を開く" }
-        : { desc: "Use the official ComfyUI canvas, nodes, models, Manager, and extensions.", enter: "Open real ComfyUI" };
-}
-
-function isLocalHost(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
-}
-
-function safeEditorUrl(raw: string, frameHost = "") {
-  const value = raw.trim();
-  if (!value || value.length > 2048) return null;
-  const withProtocol = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : isLocalHost(value.split(":")[0]) ? `http://${value}` : `https://${value}`;
-  try {
-    const url = new URL(withProtocol);
-    if (url.username || url.password || (url.protocol !== "https:" && !(url.protocol === "http:" && isLocalHost(url.hostname)))) return null;
-    if (frameHost && url.hostname === frameHost) return null;
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return null;
-  }
+        ? { desc: "GitHub 公式 ComfyUI を内蔵し、実際のノード、モデル、Manager、キューへ接続します。", enter: "公式 ComfyUI を開く" }
+        : { desc: "Built-in GitHub official ComfyUI frontend connected to real nodes, models, Manager, and execution.", enter: "Open official ComfyUI" };
 }
 
 function starterWorkflow(prompt: string) {
@@ -92,80 +65,52 @@ function starterWorkflow(prompt: string) {
       { id: 7, type: "SaveImage", pos: [1560, 240], size: [320, 120], flags: {}, order: 6, mode: 0, inputs: [{ name: "images", type: "IMAGE", link: 9 }], outputs: [], properties: { "Node name for S&R": "SaveImage" }, widgets_values: ["FRAME"] },
     ],
     links: [[1, 1, 1, 2, 0, "CLIP"], [2, 1, 1, 3, 0, "CLIP"], [3, 1, 0, 5, 0, "MODEL"], [4, 2, 0, 5, 1, "CONDITIONING"], [5, 3, 0, 5, 2, "CONDITIONING"], [6, 4, 0, 5, 3, "LATENT"], [7, 5, 0, 6, 0, "LATENT"], [8, 1, 2, 6, 1, "VAE"], [9, 6, 0, 7, 0, "IMAGE"]],
-    groups: [], config: {}, extra: { ds: { scale: 0.78, offset: [70, 80] }, frontendVersion: "1.46.3" }, version: 0.4,
+    groups: [], config: {}, extra: { ds: { scale: 0.78, offset: [70, 80] }, frontendVersion: "1.50.0" }, version: 0.4,
   };
 }
 
 export default function ComfyWorkflowStudio({ locale, seedPrompt = "", pipelineTitle = "" }: { locale: Locale; seedPrompt?: string; seedVersion?: number; pipelineTitle?: string }) {
   const text = COPY[locale];
-  const [mode, setMode] = useState<"cloud" | "self">("cloud");
-  const [endpoint, setEndpoint] = useState("http://127.0.0.1:8188");
-  const [editorUrl, setEditorUrl] = useState(COMFY_CLOUD_URL);
+  const [config, setConfig] = useState<ComfyConfigSummary | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
   const [frameKey, setFrameKey] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [launchOnly, setLaunchOnly] = useState(false);
   const [status, setStatus] = useState(text.loading);
-
   const activePrompt = seedPrompt.trim();
 
   useEffect(() => {
     let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      try {
-        const savedMode = localStorage.getItem("frame-comfy-real-mode");
-        const savedEndpoint = localStorage.getItem("frame-comfy-real-endpoint");
-        if (savedEndpoint) setEndpoint(savedEndpoint);
-        if (savedMode === "self" && savedEndpoint) {
-          const safe = safeEditorUrl(savedEndpoint, window.location.hostname);
-          if (safe) {
-            setMode("self");
-            if (safe.startsWith("https:")) setEditorUrl(safe);
-            else { setEditorUrl(""); setLaunchOnly(true); setLoading(false); setStatus(text.localOnly); }
-          }
-        }
-      } catch {}
+    void readComfyConfig().then(saved => {
+      if (!cancelled) {
+        setConfig(saved);
+        setShowConfig(!saved);
+        setChecking(false);
+        setStatus(saved ? text.connecting : text.setupTitle);
+      }
+    }).catch(error => {
+      if (!cancelled) {
+        setChecking(false);
+        setShowConfig(true);
+        setStatus(error instanceof Error ? error.message : text.setupTitle);
+      }
     });
-    return () => { cancelled = true; };
-  }, [text.localOnly]);
-
-  function chooseMode(next: "cloud" | "self") {
-    setMode(next);
-    setLaunchOnly(false);
-    if (next === "cloud") {
-      setEditorUrl(COMFY_CLOUD_URL);
-      setLoading(true);
-      setStatus(text.loading);
-      setFrameKey(value => value + 1);
-    } else {
-      setEditorUrl("");
-      setLoading(false);
-      setStatus(text.selfHint);
-    }
-    try { localStorage.setItem("frame-comfy-real-mode", next); } catch {}
-  }
-
-  function loadSelfHosted() {
-    const safe = safeEditorUrl(endpoint, window.location.hostname);
-    if (!safe) { setStatus(text.invalid); return; }
-    try { localStorage.setItem("frame-comfy-real-mode", "self"); localStorage.setItem("frame-comfy-real-endpoint", safe); } catch {}
-    setEndpoint(safe);
-    if (safe.startsWith("http:")) {
-      setEditorUrl(""); setLaunchOnly(true); setLoading(false); setStatus(text.localOnly); return;
-    }
-    setLaunchOnly(false); setEditorUrl(safe); setLoading(true); setStatus(text.loading); setFrameKey(value => value + 1);
-  }
-
-  function openEditor() {
-    const target = mode === "cloud" ? COMFY_CLOUD_URL : safeEditorUrl(endpoint, window.location.hostname);
-    if (!target) { setStatus(text.invalid); return; }
-    window.open(target, "_blank", "noopener,noreferrer");
-  }
-
-  function reloadEditor() {
-    if (!editorUrl) { openEditor(); return; }
-    setLoading(true); setStatus(text.loading); setFrameKey(value => value + 1);
-  }
+    const listener = (event: Event) => {
+      const next = (event as CustomEvent<ComfyConfigSummary | null>).detail;
+      setConfig(next);
+      setShowConfig(!next);
+      if (next) {
+        setLoading(true);
+        setFrameKey(value => value + 1);
+        setStatus(text.connecting);
+      }
+    };
+    window.addEventListener(COMFY_CONFIG_EVENT, listener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(COMFY_CONFIG_EVENT, listener);
+    };
+  }, [text.connecting, text.setupTitle]);
 
   async function copyPrompt() {
     if (!activePrompt) { setStatus(text.noPrompt); return; }
@@ -174,28 +119,42 @@ export default function ComfyWorkflowStudio({ locale, seedPrompt = "", pipelineT
 
   function downloadStarterWorkflow() {
     const blob = new Blob([JSON.stringify(starterWorkflow(activePrompt), null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "FRAME-ComfyUI-Starter.json"; anchor.click(); URL.revokeObjectURL(url); setStatus(text.downloaded);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "FRAME-ComfyUI-Starter.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setStatus(text.downloaded);
+  }
+
+  function reloadEditor() {
+    setLoading(true);
+    setStatus(text.loading);
+    setFrameKey(value => value + 1);
   }
 
   return <section className="real-comfy-studio">
     <header className="real-comfy-header">
-      <div className="real-comfy-brand"><span className="eyebrow"><span /> COMFYUI / OFFICIAL FRONTEND</span><h1>{text.title}</h1><p>{text.intro}</p></div>
-      <div className="real-comfy-mode" role="tablist"><button className={mode === "cloud" ? "active" : ""} onClick={() => chooseMode("cloud")}>{text.cloud}</button><button className={mode === "self" ? "active" : ""} onClick={() => chooseMode("self")}>{text.self}</button></div>
-      {mode === "self" && <div className="real-comfy-endpoint"><label><span>{text.endpoint}</span><input value={endpoint} onChange={event => setEndpoint(event.target.value)} onKeyDown={event => { if (event.key === "Enter") loadSelfHosted(); }} /></label><button onClick={loadSelfHosted}>{text.connect}</button></div>}
-      <div className="real-comfy-actions"><button onClick={reloadEditor}>↻ {text.reload}</button><button className="primary" onClick={openEditor}>{text.open} ↗</button></div>
+      <div className="real-comfy-brand"><span className="eyebrow"><span /> GITHUB / OFFICIAL FRONTEND</span><h1>{text.title}</h1><p>{text.intro}</p></div>
+      <div className="real-comfy-build"><span><i />{text.official}</span><small>{text.source}</small></div>
+      <div className="real-comfy-actions"><button onClick={() => setShowConfig(value => !value)}>{showConfig ? text.hideConfig : text.configure}</button>{config && <><button onClick={reloadEditor}>↻ {text.reload}</button><button className="primary" onClick={() => window.open("/comfy/index.html", "_blank", "noopener,noreferrer")}>{text.fullscreen} ↗</button></>}</div>
     </header>
 
-    <div className="real-comfy-meta"><span><i /> {text.official}</span><b>{text.manager}</b><small>{mode === "cloud" ? text.cloudHint : text.selfHint}</small></div>
+    {showConfig && <div className="real-comfy-config-drawer"><ComfyConnectionSettings locale={locale} onConfig={setConfig} /></div>}
+
+    {config && <div className="real-comfy-meta"><span><i /> {text.configured}</span><b>{config.mode === "cloud" ? text.backendCloud : text.backendRemote}</b><small>{config.baseUrl}</small></div>}
 
     {activePrompt && <aside className="real-comfy-bridge"><div><small>01 → 02 · FRAME BRIDGE</small><b>{pipelineTitle || text.bridge}</b><p>{activePrompt}</p></div><button onClick={copyPrompt}>{text.copyPrompt}</button><button onClick={downloadStarterWorkflow}>{text.downloadWorkflow}</button></aside>}
 
-    <div className={`real-comfy-frame ${launchOnly ? "launch-only" : ""}`}>
-      {editorUrl ? <>
-        {loading && <div className="real-comfy-loading"><i /><b>{text.loading}</b><span>{text.frameHelp}</span></div>}
-        <iframe key={frameKey} src={editorUrl} title="ComfyUI Official Editor" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-pointer-lock" allow="clipboard-read; clipboard-write; fullscreen; web-share" referrerPolicy="no-referrer" onLoad={() => { setLoading(false); setStatus(text.loaded); }} />
-      </> : <div className="real-comfy-launch"><span>COMFYUI</span><h2>{text.localOnly}</h2><p>{text.selfHint}</p><button onClick={openEditor}>{text.open} ↗</button></div>}
-    </div>
+    {config ? <div className="real-comfy-frame">
+      {loading && <div className="real-comfy-loading"><i /><b>{text.loading}</b><span>{text.connecting}</span></div>}
+      <iframe key={frameKey} src="/comfy/index.html" title="FRAME ComfyUI Official Frontend" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-pointer-lock" allow="clipboard-read; clipboard-write; fullscreen; web-share" onLoad={() => { setLoading(false); setStatus(text.connecting); }} />
+    </div> : <div className="comfy-onboarding">
+      <div className="comfy-onboarding-visual" aria-hidden="true"><span>COMFY</span><i /><i /><i /><b>⌁</b></div>
+      <div><small>OFFICIAL CANVAS · REAL BACKEND</small><h2>{checking ? text.loading : text.setupTitle}</h2><p>{text.setupDesc}</p><button onClick={() => setShowConfig(true)}>{text.configure} <b>↗</b></button></div>
+    </div>}
 
-    <footer className="real-comfy-footer"><span aria-live="polite"><i /> {status}</span><small>{text.privacy}</small></footer>
+    <footer className="real-comfy-footer"><span aria-live="polite"><i /> {status}</span><small>{text.privacy} · <a href="/comfy/SOURCE.md" target="_blank">{text.license}</a></small></footer>
   </section>;
 }

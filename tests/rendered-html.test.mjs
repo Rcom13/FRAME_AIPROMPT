@@ -182,28 +182,44 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(css, /\.pose-people-manager/);
 });
 
-test("connects Story, ComfyUI, Render, and Pose into a production pipeline", async () => {
-  const [studio, comfy, generate, css, comfyCss] = await Promise.all([
+test("connects Story, official ComfyUI, Render, and Pose into a production pipeline", async () => {
+  const [studio, comfy, connection, configRoute, comfyStore, worker, generate, css, comfyCss, sourceNotice, officialIndex] = await Promise.all([
     source("../app/Studio.tsx"),
     source("../app/ComfyWorkflowStudio.tsx"),
+    source("../app/ComfyConnectionSettings.tsx"),
+    source("../app/api/comfy-config/route.ts"),
+    source("../db/comfy-config.ts"),
+    source("../worker/index.ts"),
     source("../app/api/generate/route.ts"),
     source("../app/globals.css"),
     source("../app/comfy-workflow.css"),
+    source("../public/comfy/SOURCE.md"),
+    source("../public/comfy/index.html"),
   ]);
 
   assert.match(studio, /function prepareStoryForComfy/);
   assert.match(studio, /prepareStoryForComfy\(shot\)/);
   assert.match(studio, /ComfyWorkflowStudio/);
-  assert.match(comfy, /COMFY_CLOUD_URL = "https:\/\/cloud\.comfy\.org\/"/);
-  assert.match(comfy, /safeEditorUrl/);
   assert.match(comfy, /starterWorkflow/);
   assert.match(comfy, /downloadStarterWorkflow/);
-  assert.match(comfy, /frame-comfy-real-mode/);
+  assert.match(comfy, /src="\/comfy\/index\.html"/);
   assert.match(comfy, /<iframe/);
   assert.match(comfy, /allow-scripts allow-same-origin allow-forms allow-downloads/);
-  assert.match(comfy, /Manager and custom nodes come from the connected ComfyUI service/);
+  assert.match(comfy, /COMFYUI FRONTEND v1\.50\.0/);
   assert.doesNotMatch(comfy, /normalizeUiWorkflow|onResizePointerDown|comfy-node-resize/);
-  assert.doesNotMatch(comfy, /\/api\/generate/);
+  assert.doesNotMatch(comfy, /cloud\.comfy\.org.*iframe|src=\{.*cloud/i);
+  assert.match(connection, /\/api\/comfy-config/);
+  assert.match(connection, /COMFY_CONFIG_EVENT/);
+  assert.match(configRoute, /testConnection/);
+  assert.match(configRoute, /\/api\/object_info/);
+  assert.match(comfyStore, /AES-GCM/);
+  assert.match(comfyStore, /comfy_backend_configs|comfyBackendConfigs/);
+  assert.match(worker, /proxyComfyRequest/);
+  assert.match(worker, /injectCloudPromptKey/);
+  assert.match(worker, /url\.pathname === "\/comfy\/ws"/);
+  assert.match(sourceNotice, /ComfyUI_frontend\/tree\/v1\.50\.0/);
+  assert.match(officialIndex, /id="vue-app"/);
+  assert.match(officialIndex, /Loading ComfyUI/);
   assert.match(studio, /function renderPipelineImage/);
   assert.match(studio, /function sendPoseToRender/);
   assert.match(studio, /pipelineRenderPrompt\?renderPipelineImage\(\):generateImagePrompt\(true\)/);
@@ -215,6 +231,7 @@ test("connects Story, ComfyUI, Render, and Pose into a production pipeline", asy
   assert.match(comfyCss, /\.real-comfy-studio\{/);
   assert.match(comfyCss, /\.real-comfy-frame iframe\{/);
   assert.match(comfyCss, /\.real-comfy-bridge\{/);
+  assert.match(comfyCss, /\.comfy-connection-settings\{/);
   assert.doesNotMatch(comfyCss, /\.comfy-node\{/);
 });
 
@@ -241,6 +258,7 @@ test("enforces request boundaries on every mutating account and generation API",
     source("../app/api/models/route.ts"),
     source("../app/api/generate/route.ts"),
     source("../app/api/generate-image/route.ts"),
+    source("../app/api/comfy-config/route.ts"),
   ]);
 
   for (const route of routes) {
@@ -260,7 +278,7 @@ test("enforces request boundaries on every mutating account and generation API",
 });
 
 test("hardens provider URLs, API keys, remote downloads, and global responses", async () => {
-  const [security, models, generate, generateImage, worker, schema, migration] = await Promise.all([
+  const [security, models, generate, generateImage, worker, schema, migration, comfyMigration] = await Promise.all([
     source("../app/api-security.ts"),
     source("../app/api/models/route.ts"),
     source("../app/api/generate/route.ts"),
@@ -268,6 +286,7 @@ test("hardens provider URLs, API keys, remote downloads, and global responses", 
     source("../worker/index.ts"),
     source("../db/schema.ts"),
     source("../drizzle/0002_friendly_molten_man.sql"),
+    source("../drizzle/0003_absent_shiver_man.sql"),
   ]);
 
   for (const blocked of ["localhost", "metadata.google.internal", ".internal", "169&&b===254", "2001:db8"]) {
@@ -285,6 +304,8 @@ test("hardens provider URLs, API keys, remote downloads, and global responses", 
   }
   assert.match(schema, /apiRateLimits/);
   assert.match(migration, /CREATE TABLE `api_rate_limits`/);
+  assert.match(schema, /comfyBackendConfigs/);
+  assert.match(comfyMigration, /CREATE TABLE `comfy_backend_configs`/);
 });
 
 test("adds keyboard navigation, visible focus states, and background GPU throttling", async () => {

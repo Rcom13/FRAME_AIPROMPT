@@ -92,6 +92,7 @@ button:disabled{cursor:not-allowed;filter:saturate(.45);opacity:.52;transform:no
 .welcome-screen,.workspace,.image-studio,.pose-studio{view-transition-name:studio-workspace}
 ::view-transition-old(studio-workspace){animation:studioPortalOut .34s cubic-bezier(.4,0,1,1) both}
 ::view-transition-new(studio-workspace){animation:studioPortalIn .58s cubic-bezier(.16,1,.3,1) both}
+.workspace-changing .welcome-screen,.workspace-changing .workspace,.workspace-changing .image-studio,.workspace-changing .pose-studio,.workspace-changing .real-comfy-studio{opacity:0;transform:translateY(-8px) scale(.992);filter:blur(4px);transition:opacity .15s ease,transform .15s ease,filter .15s ease;pointer-events:none}.studio-switcher button,.module-card,.profile-config-button,.settings-overlay button{will-change:transform}.studio-switcher button:active,.module-card:active,.profile-config-button:active{transform:scale(.97)}
 @keyframes studioPortalOut{to{opacity:0;transform:translateY(-12px) scale(.985);filter:blur(7px)}}
 @keyframes studioPortalIn{from{opacity:0;transform:translateY(20px) scale(.985);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
 
