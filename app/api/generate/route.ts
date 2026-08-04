@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { maintenanceResponse } from "../../maintenance";
 import { detectProvider, MODEL_PROVIDERS, normalizeBaseUrl, providerById } from "../../model-providers";
 import { getStoredModelConfig } from "../../../db/model-config";
 import { outputLanguage, type Locale } from "../../i18n";
@@ -292,6 +293,7 @@ async function callModel(args:{
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if (!user) return jsonResponse({ error: "请先使用 ChatGPT 登录后再生成。" }, 401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"content-generation",30,600);if(limited)return limited;

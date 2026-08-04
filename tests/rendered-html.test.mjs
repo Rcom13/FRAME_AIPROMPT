@@ -359,3 +359,32 @@ test("adds keyboard and outside-click navigation, visible focus states, and back
   assert.match(rig, /IntersectionObserver/);
   assert.match(rig, /visibilitychange/);
 });
+
+test("gates external visitors and APIs behind a dedicated maintenance page", async () => {
+  const [page, maintenance, maintenancePage, css, ...routes] = await Promise.all([
+    source("../app/page.tsx"),
+    source("../app/maintenance.ts"),
+    source("../app/MaintenancePage.tsx"),
+    source("../app/globals.css"),
+    source("../app/api/models/route.ts"),
+    source("../app/api/model-config/route.ts"),
+    source("../app/api/image-config/route.ts"),
+    source("../app/api/generate/route.ts"),
+    source("../app/api/generate-image/route.ts"),
+    source("../app/api/comfy-config/route.ts"),
+  ]);
+
+  assert.match(page, /maintenanceModeEnabled\(\) && !isMaintenanceOwner\(account\)/);
+  assert.match(page, /<MaintenancePage/);
+  assert.match(maintenance, /SITE_MAINTENANCE_MODE/);
+  assert.match(maintenance, /SITE_MAINTENANCE_OWNER_EMAILS/);
+  assert.match(maintenance, /status: 503/);
+  assert.match(maintenancePage, /SYSTEM MAINTENANCE/);
+  assert.match(maintenancePage, /PUBLIC ACCESS/);
+  assert.match(css, /\.maintenance-shell\{/);
+  assert.match(css, /@keyframes maintenanceOrbit/);
+  for (const route of routes) {
+    assert.match(route, /maintenanceResponse/);
+    assert.match(route, /if\(maintenance\)return maintenance/);
+  }
+});

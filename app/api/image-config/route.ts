@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { maintenanceResponse } from "../../maintenance";
 import { deleteStoredImageGenerationConfig, getStoredImageGenerationConfigSummary, saveStoredImageGenerationConfig } from "../../../db/image-generation-config";
 import { IMAGE_GENERATION_PROVIDERS, imageGenerationProviderById, normalizeImageBaseUrl } from "../../image-generation-providers";
 import { apiReply, enforceRateLimit, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError, safeModelId } from "../../api-security";
@@ -8,13 +9,13 @@ export const dynamic="force-dynamic";
 const reply=apiReply;
 
 export async function GET(){
-  const user=await getChatGPTUser();if(!user)return reply({error:"请先登录。"},401);
+  const user=await getChatGPTUser();const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;if(!user)return reply({error:"请先登录。"},401);
   const limited=await enforceRateLimit(user.userId,"image-config-read",120,3600);if(limited)return limited;
   return reply({config:await getStoredImageGenerationConfigSummary(user.userId)});
 }
 
 export async function POST(request:Request){
-  const user=await getChatGPTUser();if(!user)return reply({error:"请先登录后再保存图片引擎。"},401);
+  const user=await getChatGPTUser();const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;if(!user)return reply({error:"请先登录后再保存图片引擎。"},401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"image-config-write",20,3600);if(limited)return limited;
   let body:{providerId?:string;apiBaseUrl?:string;model?:string;apiKey?:string};
@@ -35,7 +36,7 @@ export async function POST(request:Request){
 }
 
 export async function DELETE(request:Request){
-  const user=await getChatGPTUser();if(!user)return reply({error:"请先登录。"},401);
+  const user=await getChatGPTUser();const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;if(!user)return reply({error:"请先登录。"},401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"image-config-write",20,3600);if(limited)return limited;
   await deleteStoredImageGenerationConfig(user.userId);return reply({deleted:true});

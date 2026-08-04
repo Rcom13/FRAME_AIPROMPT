@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { maintenanceResponse } from "../../maintenance";
 import {
   deleteStoredComfyConfig,
   getStoredComfyConfig,
@@ -43,6 +44,7 @@ async function testConnection(baseUrl: string, authMode: ComfyAuthMode, apiKey: 
 
 export async function GET() {
   const user = await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if (!user) return reply({ error: "请先登录。" }, 401);
   const limited = await enforceRateLimit(user.userId, "comfy-config-read", 120, 3600);
   if (limited) return limited;
@@ -51,6 +53,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if (!user) return reply({ error: "请先登录后再配置 ComfyUI。" }, 401);
   const crossSite = rejectCrossSiteMutation(request);
   if (crossSite) return crossSite;
@@ -89,6 +92,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const user = await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if (!user) return reply({ error: "请先登录。" }, 401);
   const crossSite = rejectCrossSiteMutation(request);
   if (crossSite) return crossSite;

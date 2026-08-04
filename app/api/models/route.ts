@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { maintenanceResponse } from "../../maintenance";
 import { detectProvider, MODEL_PROVIDERS, normalizeBaseUrl, providerById } from "../../model-providers";
 import { getStoredModelConfig } from "../../../db/model-config";
 import { apiReply, enforceRateLimit, isSafePublicHttps, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError } from "../../api-security";
@@ -25,6 +26,7 @@ function modelOptions(payload: any, providerId: string) {
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if (!user) return reply({ error: "请先登录后再配置模型。" }, 401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"model-discovery",30,3600);if(limited)return limited;

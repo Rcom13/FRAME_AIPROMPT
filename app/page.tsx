@@ -1,10 +1,15 @@
-import { getChatGPTUser } from "./chatgpt-auth";
+import { chatGPTSignInPath, chatGPTSignOutPath, getChatGPTUser } from "./chatgpt-auth";
+import MaintenancePage from "./MaintenancePage";
+import { isMaintenanceOwner, maintenanceModeEnabled } from "./maintenance";
 import Studio from "./Studio";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const account = await getChatGPTUser();
+  if (maintenanceModeEnabled() && !isMaintenanceOwner(account)) {
+    return <MaintenancePage signedIn={Boolean(account)} signInPath={chatGPTSignInPath("/")} signOutPath={chatGPTSignOutPath("/")} />;
+  }
   const user = account ? {
     displayName: account.displayName,
     email: account.email,

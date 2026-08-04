@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { maintenanceResponse } from "../../maintenance";
 import { getStoredImageGenerationConfig } from "../../../db/image-generation-config";
 import { imageGenerationProviderById } from "../../image-generation-providers";
 import { apiReply, enforceRateLimit, isSafePublicHttps, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError } from "../../api-security";
@@ -50,7 +51,7 @@ async function completedImage(payload:any){
 }
 
 export async function POST(request:Request){
-  const user=await getChatGPTUser();if(!user)return reply({error:"请先登录后再生成图片。"},401);
+  const user=await getChatGPTUser();const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;if(!user)return reply({error:"请先登录后再生成图片。"},401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"image-generation",20,600);if(limited)return limited;
   const config=await getStoredImageGenerationConfig(user.userId);if(!config)return reply({error:"请先在 Profile 中配置图片生成引擎。"},400);
@@ -110,7 +111,7 @@ export async function POST(request:Request){
 }
 
 export async function GET(request:Request){
-  const user=await getChatGPTUser();if(!user)return reply({error:"请先登录。"},401);
+  const user=await getChatGPTUser();const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;if(!user)return reply({error:"请先登录。"},401);
   const limited=await enforceRateLimit(user.userId,"image-generation-poll",300,600);if(limited)return limited;
   const config=await getStoredImageGenerationConfig(user.userId);if(!config)return reply({error:"图片生成引擎尚未配置。"},400);
   const provider=imageGenerationProviderById(config.providerId);const url=new URL(request.url);

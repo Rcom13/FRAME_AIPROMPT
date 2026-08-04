@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { maintenanceResponse } from "../../maintenance";
 import { deleteStoredModelConfig, getStoredModelConfigSummary, saveStoredModelConfig } from "../../../db/model-config";
 import { MODEL_PROVIDERS, normalizeBaseUrl, providerById } from "../../model-providers";
 import { apiReply, enforceRateLimit, isSafePublicHttps, matchesTrustedProviderHost, readJsonBody, rejectCrossSiteMutation, RequestValidationError, safeModelId } from "../../api-security";
@@ -9,6 +10,7 @@ const reply=apiReply;
 
 export async function GET(){
   const user=await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if(!user)return reply({error:"请先登录。"},401);
   const limited=await enforceRateLimit(user.userId,"model-config-read",120,3600);if(limited)return limited;
   const config=await getStoredModelConfigSummary(user.userId);
@@ -17,6 +19,7 @@ export async function GET(){
 
 export async function POST(request:Request){
   const user=await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if(!user)return reply({error:"请先登录后再保存模型配置。"},401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"model-config-write",20,3600);if(limited)return limited;
@@ -39,6 +42,7 @@ export async function POST(request:Request){
 
 export async function DELETE(request:Request){
   const user=await getChatGPTUser();
+  const maintenance=maintenanceResponse(user);if(maintenance)return maintenance;
   if(!user)return reply({error:"请先登录。"},401);
   const crossSite=rejectCrossSiteMutation(request);if(crossSite)return crossSite;
   const limited=await enforceRateLimit(user.userId,"model-config-write",20,3600);if(limited)return limited;
