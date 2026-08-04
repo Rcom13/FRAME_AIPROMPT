@@ -24,8 +24,9 @@ test("keeps model credentials in encrypted account storage", async () => {
 });
 
 test("renders a divergent thought field on the welcome workspace", async () => {
-  const [studio, css] = await Promise.all([
+  const [studio, visuals, css] = await Promise.all([
     source("../app/Studio.tsx"),
+    source("../app/WelcomeModuleVisual.tsx"),
     source("../app/globals.css"),
   ]);
 
@@ -35,6 +36,14 @@ test("renders a divergent thought field on the welcome workspace", async () => {
   assert.match(css, /\.idea-field\{/);
   assert.match(css, /@keyframes thoughtTrace/);
   assert.match(css, /@keyframes signalTravel/);
+  for (const visual of ["story", "workflow", "render", "pose"]) {
+    assert.match(studio, new RegExp(`WelcomeModuleVisual type="${visual}"`));
+  }
+  assert.match(studio, /onPointerMove=\{moveModuleCard\}/);
+  assert.match(visuals, /GRAPH ONLINE/);
+  assert.match(visuals, /HUMAN RIG ACTIVE/);
+  assert.match(css, /@keyframes graphPacket/);
+  assert.match(css, /@keyframes rigBodyFloat/);
   assert.match(css, /prefers-reduced-motion:reduce/);
 });
 

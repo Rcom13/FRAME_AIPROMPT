@@ -7,6 +7,7 @@ import { LANGUAGE_OPTIONS, optionLabel, preferredLocale, referenceRoleLabel, tra
 import type { CharacterFacing, DragAxis, PoseRigHandle, RigView } from "./PoseRig";
 import { POSE_PRESET_LIBRARY, type JointMap, type PoseCategory, type PoseGender, type PosePreset } from "./pose-presets";
 import ComfyConnectionSettings from "./ComfyConnectionSettings";
+import WelcomeModuleVisual from "./WelcomeModuleVisual";
 
 const PoseRig=lazy(()=>import("./PoseRig"));
 const ComfyWorkflowStudio=lazy(()=>import("./ComfyWorkflowStudio"));
@@ -35,6 +36,9 @@ type PipelineSource = { stage:"story"|"prompt"|"pose"; title:string; detail:stri
 const emptyStory:Story={title:"",logline:"",hook:"",direction:"",structure:[]};
 
 function sameApiEndpoint(a:string,b:string){return a.trim().replace(/\/+$/,"").toLowerCase()===b.trim().replace(/\/+$/,"").toLowerCase()}
+
+function moveModuleCard(event:PointerEvent<HTMLButtonElement>){if(event.pointerType==="touch")return;const card=event.currentTarget;const rect=card.getBoundingClientRect();const x=(event.clientX-rect.left)/rect.width-.5;const y=(event.clientY-rect.top)/rect.height-.5;card.style.setProperty("--card-rx",`${(-y*3.2).toFixed(2)}deg`);card.style.setProperty("--card-ry",`${(x*4.2).toFixed(2)}deg`);card.style.setProperty("--visual-x",`${(x*9).toFixed(1)}px`);card.style.setProperty("--visual-y",`${(y*7).toFixed(1)}px`)}
+function resetModuleCard(event:PointerEvent<HTMLButtonElement>){const card=event.currentTarget;card.style.setProperty("--card-rx","0deg");card.style.setProperty("--card-ry","0deg");card.style.setProperty("--visual-x","0px");card.style.setProperty("--visual-y","0px")}
 
 const genres = ["悬疑惊悚", "科幻未来", "治愈情感", "古风奇幻", "都市反转", "搞笑脑洞"];
 const styles = ["电影写实", "日系动漫", "3D 动画", "赛博朋克", "水墨国风", "复古胶片"];
@@ -274,10 +278,10 @@ export default function Studio({user}:{user:User}){
       <IdeaField locale={locale}/>
       <div className="welcome-copy"><span className="eyebrow"><span/> FRAME CREATIVE OS</span><h1>{t("welcomeBack")}<br/><em>{(user?.displayName||t("creator")).split("@")[0]}</em><b className="welcome-period">。</b></h1><p>{t("welcomeDesc")}</p><div className="welcome-status"><i/><span>{t("ready")}</span><b>{t("formatCount",{video:models.length,image:imageModels.length})}</b></div></div>
       <div className="module-grid">
-        <button className="module-card story-module" onClick={()=>switchWorkspace("story")}><span className="module-index">01</span><div className="module-visual storyboard-visual"><i/><i/><i/><b>▶</b></div><div className="module-meta"><span>VIDEO NARRATIVE</span><h2>AI STORY<br/>STUDIO</h2><p>{t("storyModuleDesc")}</p><em>{t("enterStory")} <b>↗</b></em></div></button>
-        <button className="module-card image-module" onClick={()=>switchWorkspace("image")}><span className="module-index">02</span><div className="module-visual workflow-visual"><i/><i/><i/><span/><span/><b>⌁</b></div><div className="module-meta"><span>NODE WORKFLOW</span><h2>COMFY WORKFLOW<br/>STUDIO</h2><p>{comfyCard.desc}</p><em>{comfyCard.enter} <b>↗</b></em></div></button>
-        <button className="module-card render-module" onClick={()=>switchWorkspace("generate")}><span className="module-index">03</span><div className="module-visual render-visual"><i/><i/><span/><b>◈</b></div><div className="module-meta"><span>IMAGE GENERATION</span><h2>IMAGE RENDER<br/>STUDIO</h2><p>{t("renderModuleDesc")}</p><em>{t("enterRender")} <b>↗</b></em></div></button>
-        <button className="module-card pose-module" onClick={()=>switchWorkspace("pose")}><span className="module-index">04</span><div className="module-visual pose-visual"><span className="pose-head"/><span className="pose-body"/><i className="pose-arm left"/><i className="pose-arm right"/><i className="pose-leg left"/><i className="pose-leg right"/><b>3D</b></div><div className="module-meta"><span>CHARACTER POSE</span><h2>POSE RIG<br/>STUDIO</h2><p>{t("poseModuleDesc")}</p><em>{t("enterPose")} <b>↗</b></em></div></button>
+        <button className="module-card portal-card story-module" onPointerMove={moveModuleCard} onPointerLeave={resetModuleCard} onClick={()=>switchWorkspace("story")}><div className="module-card-head"><span className="module-index">01</span><small><i/>SEQUENCE READY</small></div><WelcomeModuleVisual type="story"/><div className="module-meta"><span>VIDEO NARRATIVE</span><h2>AI STORY<br/>STUDIO</h2><p>{t("storyModuleDesc")}</p><em>{t("enterStory")} <b>↗</b></em></div></button>
+        <button className="module-card portal-card image-module" onPointerMove={moveModuleCard} onPointerLeave={resetModuleCard} onClick={()=>switchWorkspace("image")}><div className="module-card-head"><span className="module-index">02</span><small><i/>GRAPH ONLINE</small></div><WelcomeModuleVisual type="workflow"/><div className="module-meta"><span>NODE WORKFLOW</span><h2>COMFY WORKFLOW<br/>STUDIO</h2><p>{comfyCard.desc}</p><em>{comfyCard.enter} <b>↗</b></em></div></button>
+        <button className="module-card portal-card render-module" onPointerMove={moveModuleCard} onPointerLeave={resetModuleCard} onClick={()=>switchWorkspace("generate")}><div className="module-card-head"><span className="module-index">03</span><small><i/>ENGINE READY</small></div><WelcomeModuleVisual type="render"/><div className="module-meta"><span>IMAGE GENERATION</span><h2>IMAGE RENDER<br/>STUDIO</h2><p>{t("renderModuleDesc")}</p><em>{t("enterRender")} <b>↗</b></em></div></button>
+        <button className="module-card portal-card pose-module" onPointerMove={moveModuleCard} onPointerLeave={resetModuleCard} onClick={()=>switchWorkspace("pose")}><div className="module-card-head"><span className="module-index">04</span><small><i/>RIG ACTIVE</small></div><WelcomeModuleVisual type="pose"/><div className="module-meta"><span>CHARACTER POSE</span><h2>POSE RIG<br/>STUDIO</h2><p>{t("poseModuleDesc")}</p><em>{t("enterPose")} <b>↗</b></em></div></button>
       </div>
     </section>:workspaceMode==="image"?<Suspense fallback={<section className="comfy-loading"><i/><b>COMFY WORKFLOW STUDIO</b></section>}><ComfyWorkflowStudio locale={locale} seedPrompt={comfySeedPrompt} seedVersion={comfySeedVersion} pipelineTitle={pipelineSource?.stage==="story"?pipelineSource.title:""}/></Suspense>:workspaceMode==="generate"?<section className="image-studio render-studio">
       <aside className="image-control">
