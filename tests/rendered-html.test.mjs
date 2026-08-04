@@ -316,7 +316,7 @@ test("hardens provider URLs, API keys, remote downloads, and global responses", 
   assert.match(comfyMigration, /CREATE TABLE `comfy_backend_configs`/);
 });
 
-test("adds keyboard navigation, visible focus states, and background GPU throttling", async () => {
+test("adds keyboard and outside-click navigation, visible focus states, and background GPU throttling", async () => {
   const [studio, rig, css] = await Promise.all([
     source("../app/Studio.tsx"),
     source("../app/PoseRig.tsx"),
@@ -326,9 +326,14 @@ test("adds keyboard navigation, visible focus states, and background GPU throttl
   assert.match(studio, /className="studio-switcher"/);
   assert.match(studio, /event\.altKey/);
   assert.match(studio, /event\.key==="Escape"/);
+  assert.match(studio, /document\.addEventListener\("pointerdown",onPointerDown,true\)/);
+  assert.match(studio, /closest\("\[data-topbar-popover\]"\)/);
+  assert.match(studio, /className="popover-dismiss-layer"/);
+  assert.match(studio, /aria-expanded=\{profileOpen\}/);
   assert.match(studio, /className="skip-link"/);
   assert.match(studio, /aria-live="polite"/);
   assert.match(css, /:focus-visible/);
+  assert.match(css, /\.popover-dismiss-layer\{/);
   assert.match(rig, /IntersectionObserver/);
   assert.match(rig, /visibilitychange/);
 });
