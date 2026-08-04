@@ -9,6 +9,7 @@ const reply=apiReply;
 
 export async function GET(){
   const user=await getChatGPTUser();if(!user)return reply({error:"请先登录。"},401);
+  const limited=await enforceRateLimit(user.userId,"image-config-read",120,3600);if(limited)return limited;
   return reply({config:await getStoredImageGenerationConfigSummary(user.userId)});
 }
 

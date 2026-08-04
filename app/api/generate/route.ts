@@ -314,8 +314,8 @@ export async function POST(request: Request) {
   const selectedProvider=providerById(providerId);
   const baseUrl=normalizeBaseUrl(userConfig?.baseUrl||storedConfig?.apiBaseUrl||selectedProvider.baseUrl);
   const storedMatches=storedConfig?.providerId===providerId&&storedConfig.apiBaseUrl===baseUrl;
-  const apiKey=userConfig?.apiKey?.trim()||(storedMatches?storedConfig.apiKey:"")||process.env.OPENAI_API_KEY||"";
-  const generationModel=userConfig?.model?.trim()||storedConfig?.model||process.env.OPENAI_MODEL||"gpt-5.6-terra";
+  const apiKey=userConfig?.apiKey?.trim()||(storedMatches?storedConfig.apiKey:"")||"";
+  const generationModel=userConfig?.model?.trim()||storedConfig?.model||"";
   if(!apiKey)return jsonResponse({error:"请先在 Profile → AI 模型配置中添加 API Key。"},400);
   if(!safeModelId(generationModel))return jsonResponse({error:"请选择一个有效的生成模型。"},400);
   if(!isSafePublicHttps(baseUrl)||!matchesTrustedProviderHost(baseUrl,providerId==="custom"?"":selectedProvider.baseUrl))return jsonResponse({error:"模型接口必须使用该服务商的安全公网 HTTPS 地址；自定义接口请使用“兼容接口”。"},400);

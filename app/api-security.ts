@@ -13,9 +13,9 @@ export function apiReply(body:unknown,status=200,extraHeaders:Record<string,stri
 
 export function rejectCrossSiteMutation(request:Request){
   const site=request.headers.get("sec-fetch-site")?.toLowerCase();
-  if(site==="cross-site")return apiReply({error:"已拒绝跨站请求。"},403);
+  if(site)return site==="same-origin"||site==="same-site"||site==="none"?null:apiReply({error:"已拒绝跨站请求。"},403);
   const origin=request.headers.get("origin");
-  if(!origin)return null;
+  if(!origin)return apiReply({error:"请求来源验证失败。"},403);
   try{return new URL(origin).origin===new URL(request.url).origin?null:apiReply({error:"请求来源验证失败。"},403)}catch{return apiReply({error:"请求来源验证失败。"},403)}
 }
 
@@ -52,7 +52,9 @@ function isUnsafeIpv4(host:string){
 function isUnsafeIpv6(host:string){
   const value=host.replace(/^\[|\]$/g,"").toLowerCase();
   if(!value.includes(":"))return false;
-  return value==="::"||value==="::1"||value.startsWith("fc")||value.startsWith("fd")||value.startsWith("ff")||/^fe[89ab]/.test(value)||value.startsWith("2001:db8")||value.startsWith("::ffff:");
+  // Blocks loopback/ULA/multicast/link-local/doc ranges, plus IPv4-in-IPv6 transition
+  // prefixes (6to4, Teredo, NAT64) that can tunnel private/loopback IPv4 addresses.
+  return value==="::"||value==="::1"||value.startsWith("fc")||value.startsWith("fd")||value.startsWith("ff")||/^fe[89ab]/.test(value)||value.startsWith("2001:db8")||value.startsWith("::ffff:")||value.startsWith("2002:")||value.startsWith("2001:0:")||value.startsWith("2001::")||value.startsWith("64:ff9b::");
 }
 
 export function isSafePublicHttps(value:string){
