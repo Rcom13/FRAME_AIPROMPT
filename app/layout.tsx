@@ -19,13 +19,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "FRAME｜AI CREATIVE OS",
     description: "AI 剧情 · ComfyUI 工作流 · 图片生成 · 3D 姿态设计",
-    images: ["https://story-forge-cn.rjins.chatgpt.site/og-v3.png"],
+    images: ["https://story-forge-cn.rjins.chatgpt.site/og-v4.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "FRAME｜AI CREATIVE OS",
     description: "AI 剧情 · ComfyUI 工作流 · 图片生成 · 3D 姿态设计",
-    images: ["https://story-forge-cn.rjins.chatgpt.site/og-v3.png"],
+    images: ["https://story-forge-cn.rjins.chatgpt.site/og-v4.png"],
   },
 };
 
