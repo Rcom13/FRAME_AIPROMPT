@@ -170,7 +170,14 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(rig, /createCharacter/);
   assert.match(rig, /addPerson:gender/);
   assert.match(rig, /setBodyType:gender/);
-  assert.match(rig, /whiteMaterial/);
+  assert.match(rig, /mannequinPalette/);
+  assert.match(rig, /surfaceMaterial/);
+  assert.match(rig, /hitTargets/);
+  assert.match(rig, /paintJoint\(hit\.rig,hit\.joint,"hover"\)/);
+  assert.match(rig, /bodyBasis/);
+  assert.match(rig, /shoulderL:24/);
+  assert.match(rig, /kneeL:132/);
+  assert.match(rig, /chainSwingLimits/);
   assert.match(rig, /conformToTargets/);
   assert.match(rig, /toDataURL\("image\/png"\)/);
   assert.match(studio, /class PoseErrorBoundary/);
