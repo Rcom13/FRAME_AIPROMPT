@@ -98,13 +98,12 @@ function BackdropVisual({mode}:{mode:Backdrop}){
   </div>;
 }
 
-function IdeaField({locale}:{locale:Locale}){
+function IdeaField(){
   const branches=[
     {w:"24vw",r:"-52deg",d:"-.4s"},{w:"27vw",r:"-12deg",d:"-2.1s"},{w:"25vw",r:"27deg",d:"-3.8s"},
     {w:"23vw",r:"83deg",d:"-1.2s"},{w:"24vw",r:"137deg",d:"-4.5s"},{w:"31vw",r:"178deg",d:"-2.9s"},
     {w:"27vw",r:"-145deg",d:"-5.2s"},{w:"25vw",r:"-83deg",d:"-1.8s"},{w:"36vw",r:"39deg",d:"-4.1s"},
   ];
-  const labels:Record<Locale,string[]>={"zh-CN":["角色","冲突","镜头","节奏","情绪","世界","意象","声音","转折"],"zh-TW":["角色","衝突","鏡頭","節奏","情緒","世界","意象","聲音","轉折"],ja:["人物","葛藤","ショット","リズム","感情","世界","イメージ","音","転換"],en:["CHARACTER","CONFLICT","SHOT","RHYTHM","EMOTION","WORLD","MOTIF","SOUND","TURN"]};
   const thoughts=[
     {x:"69%",y:"23%",d:"-.7s"},{x:"82%",y:"37%",d:"-2.8s"},{x:"78%",y:"62%",d:"-4.2s"},
     {x:"58%",y:"78%",d:"-1.5s"},{x:"37%",y:"70%",d:"-3.4s"},{x:"25%",y:"48%",d:"-5s"},
@@ -112,9 +111,9 @@ function IdeaField({locale}:{locale:Locale}){
   ];
   return <div className="idea-field" aria-hidden="true">
     <div className="idea-radar ring-one"/><div className="idea-radar ring-two"/><div className="idea-radar ring-three"/>
-    <div className="idea-origin"><i/><span>IDEA</span></div>
+    <div className="idea-origin"><i/></div>
     {branches.map((item,index)=><span className={`idea-branch branch-${index+1}`} key={`branch-${index}`} style={{"--branch-width":item.w,"--branch-angle":item.r,"--branch-delay":item.d} as CSSProperties}><i/><b/></span>)}
-    {thoughts.map((item,index)=><span className="thought-node" key={labels[locale][index]} style={{"--node-x":item.x,"--node-y":item.y,"--node-delay":item.d} as CSSProperties}><i/><b>{labels[locale][index]}</b><em>{String(index+1).padStart(2,"0")}</em></span>)}
+    {thoughts.map((item,index)=><span className="thought-node" key={`thought-${index}`} style={{"--node-x":item.x,"--node-y":item.y,"--node-delay":item.d} as CSSProperties}><i/></span>)}
     {Array.from({length:18},(_,index)=><i className="idea-particle" key={`particle-${index}`} style={{"--particle-index":String(index),"--particle-delay":`${-index*.73}s`} as CSSProperties}/>) }
   </div>;
 }
@@ -307,7 +306,7 @@ export default function Studio({user}:{user:User}){
       <div className="settings-footer"><div className="selected-engine">{modelBrand.logo?<img src={modelBrand.logo} alt=""/>:<i>{modelBrand.short}</i>}<span><small>{savedKeyMatches?t("accountConnected"):t("currentEngine")}</small><b>{generationModel||t("noModel")}</b></span></div><div><button className="clear-config" onClick={clearModelConfig}>{t("deleteConfig")}</button><button className="save-config" onClick={saveModelConfig}>{t("saveAccount")} <b>↗</b></button></div></div>
     </section></div>}
     {workspaceMode==="home"?<section className="welcome-screen">
-      <IdeaField locale={locale}/>
+      <IdeaField/>
       <div className="welcome-copy"><span className="eyebrow"><span/> FRAME CREATIVE OS</span><h1>{t("welcomeBack")}<br/><em>{(user?.displayName||t("creator")).split("@")[0]}</em><b className="welcome-period">。</b></h1><p>{t("welcomeDesc")}</p><div className="welcome-status"><i/><span>{t("ready")}</span><b>{t("formatCount",{video:models.length,image:imageModels.length})}</b></div></div>
       <div className="module-grid">
         <button className="module-card portal-card story-module" onPointerMove={moveModuleCard} onPointerLeave={resetModuleCard} onClick={()=>switchWorkspace("story")}><div className="module-card-head"><span className="module-index">01</span><small><i/>SEQUENCE READY</small></div><WelcomeModuleVisual type="story"/><div className="module-meta"><span>VIDEO NARRATIVE</span><h2>AI STORY<br/>STUDIO</h2><p>{t("storyModuleDesc")}</p><em>{t("enterStory")} <b>↗</b></em></div></button>

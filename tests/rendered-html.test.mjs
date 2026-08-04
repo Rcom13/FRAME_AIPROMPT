@@ -30,9 +30,11 @@ test("renders a divergent thought field on the welcome workspace", async () => {
     source("../app/globals.css"),
   ]);
 
-  assert.match(studio, /function IdeaField\(\{locale\}/);
-  assert.match(studio, /<IdeaField locale=\{locale\}\/>/);
-  assert.match(studio, /\["CHARACTER","CONFLICT","SHOT","RHYTHM","EMOTION","WORLD","MOTIF","SOUND","TURN"\]/);
+  assert.match(studio, /function IdeaField\(\)/);
+  assert.match(studio, /<IdeaField\/>/);
+  assert.doesNotMatch(studio, /labels\[locale\]\[index\]/);
+  assert.doesNotMatch(studio, /<b>\{labels\[locale\]\[index\]\}<\/b>/);
+  assert.doesNotMatch(studio, /<em>\{String\(index\+1\)\.padStart\(2,"0"\)\}<\/em>/);
   assert.match(css, /\.idea-field\{/);
   for (const mode of ["clean-backdrop", "orbital-backdrop", "neural-backdrop"]) {
     assert.match(studio, new RegExp(mode));
