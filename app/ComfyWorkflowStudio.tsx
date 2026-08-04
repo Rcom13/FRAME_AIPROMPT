@@ -1,297 +1,201 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- ComfyUI returns authenticated runtime blob URLs. */
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useState } from "react";
 import type { Locale } from "./i18n";
 
-type ComfyValue=string|number|boolean|null|ComfyValue[]|{[key:string]:ComfyValue};
-type ComfyNode={class_type:string;inputs:Record<string,ComfyValue>;_meta?:{title?:string}};
-type ComfyWorkflow=Record<string,ComfyNode>;
-type Point={x:number;y:number};
-type NodeSize={width:number;height:number};
-type NodeDefinition={type:string;title:string;color:string;inputs:Record<string,ComfyValue>;connections:string[];widgets:string[];outputs:string[]};
-type ServerNodeSchema={input?:{required?:Record<string,unknown>;optional?:Record<string,unknown>};output_name?:string[];display_name?:string};
-type ResultAsset={url:string;name:string;kind:"image"|"video"|"audio"};
-type ConnectionSource={nodeId:string;output:number}|null;
-type DragState=
-  |{kind:"pan";pointerId:number;startX:number;startY:number;origin:Point}
-  |{kind:"node";pointerId:number;nodeId:string;startX:number;startY:number;origin:Point}
-  |{kind:"resize";pointerId:number;nodeId:string;startX:number;startY:number;origin:NodeSize}
-  |null;
+const COMFY_CLOUD_URL = "https://cloud.comfy.org/";
 
-const DEFAULT_NODE_WIDTH=250;
-const MIN_NODE_WIDTH=190;
-const MIN_NODE_HEIGHT=126;
-const MAX_NODE_WIDTH=720;
-const MAX_NODE_HEIGHT=680;
-const NODE_LIBRARY:NodeDefinition[]=[
-  {type:"CheckpointLoaderSimple",title:"Load Checkpoint",color:"violet",inputs:{ckpt_name:""},connections:[],widgets:["ckpt_name"],outputs:["MODEL","CLIP","VAE"]},
-  {type:"CLIPTextEncode",title:"CLIP Text Encode",color:"amber",inputs:{text:"",clip:null},connections:["clip"],widgets:["text"],outputs:["CONDITIONING"]},
-  {type:"EmptyLatentImage",title:"Empty Latent Image",color:"rose",inputs:{width:1024,height:1024,batch_size:1},connections:[],widgets:["width","height","batch_size"],outputs:["LATENT"]},
-  {type:"KSampler",title:"KSampler",color:"orange",inputs:{seed:42,steps:24,cfg:7,sampler_name:"euler",scheduler:"normal",denoise:1,model:null,positive:null,negative:null,latent_image:null},connections:["model","positive","negative","latent_image"],widgets:["seed","steps","cfg","sampler_name","scheduler","denoise"],outputs:["LATENT"]},
-  {type:"VAEDecode",title:"VAE Decode",color:"blue",inputs:{samples:null,vae:null},connections:["samples","vae"],widgets:[],outputs:["IMAGE"]},
-  {type:"VAEEncode",title:"VAE Encode",color:"blue",inputs:{pixels:null,vae:null},connections:["pixels","vae"],widgets:[],outputs:["LATENT"]},
-  {type:"LoadImage",title:"Load Image",color:"green",inputs:{image:""},connections:[],widgets:["image"],outputs:["IMAGE","MASK"]},
-  {type:"SaveImage",title:"Save Image",color:"blue",inputs:{filename_prefix:"FRAME",images:null},connections:["images"],widgets:["filename_prefix"],outputs:[]},
-  {type:"PreviewImage",title:"Preview Image",color:"blue",inputs:{images:null},connections:["images"],widgets:[],outputs:[]},
-  {type:"ControlNetLoader",title:"Load ControlNet",color:"green",inputs:{control_net_name:""},connections:[],widgets:["control_net_name"],outputs:["CONTROL_NET"]},
-];
+const COPY = {
+  "zh-CN": {
+    title: "真正的 ComfyUI，直接进入工作区。",
+    intro: "02 不再模拟节点。这里载入官方 ComfyUI 前端或你自己的完整 ComfyUI 页面，节点、模型、队列、历史、Manager 与扩展均由真实服务提供。",
+    cloud: "Comfy Cloud",
+    self: "自托管 / 本机",
+    endpoint: "ComfyUI 页面地址",
+    connect: "载入完整编辑器",
+    open: "新窗口打开",
+    reload: "重新载入",
+    loaded: "真实 ComfyUI 编辑器已载入",
+    loading: "正在载入官方 ComfyUI…",
+    invalid: "请输入有效的 HTTPS 地址；本机仅允许 localhost 或 127.0.0.1。",
+    localOnly: "浏览器会阻止 HTTPS 网站嵌入本机 HTTP 页面。请用新窗口打开本机 ComfyUI，完整功能不会受影响。",
+    frameHelp: "如果登录页或画布没有出现，请先在新窗口完成登录，再点“重新载入”。",
+    official: "官方完整前端",
+    manager: "Manager 与自定义节点由所连接的 ComfyUI 服务提供",
+    cloudHint: "无需在 FRAME 内配置 API Key；Comfy Cloud 登录与用量由 Comfy 官方页面处理。",
+    selfHint: "推荐使用 HTTPS 的远程 ComfyUI。http://127.0.0.1:8188 可在新窗口正常使用。",
+    bridge: "来自 01 STORY 的创作内容已就绪",
+    copyPrompt: "复制镜头提示词",
+    downloadWorkflow: "下载基础工作流",
+    copied: "提示词已复制，可粘贴到 CLIP Text Encode 节点",
+    downloaded: "基础工作流已下载，把 JSON 拖入 ComfyUI 画布即可",
+    noPrompt: "尚未接收 01 STORY 内容",
+    privacy: "FRAME 不读取 iframe 内的账号、工作流、模型或密钥。",
+  },
+  "zh-TW": {
+    title: "真正的 ComfyUI，直接進入工作區。",
+    intro: "02 不再模擬節點。這裡載入官方 ComfyUI 前端或你自己的完整 ComfyUI 頁面，節點、模型、佇列、歷史、Manager 與擴充均由真實服務提供。",
+    cloud: "Comfy Cloud", self: "自架 / 本機", endpoint: "ComfyUI 頁面位址", connect: "載入完整編輯器", open: "新視窗開啟", reload: "重新載入", loaded: "真實 ComfyUI 編輯器已載入", loading: "正在載入官方 ComfyUI…", invalid: "請輸入有效的 HTTPS 位址；本機僅允許 localhost 或 127.0.0.1。", localOnly: "瀏覽器會阻止 HTTPS 網站嵌入本機 HTTP 頁面。請用新視窗開啟本機 ComfyUI，完整功能不受影響。", frameHelp: "若登入頁或畫布沒有出現，請先在新視窗完成登入，再按重新載入。", official: "官方完整前端", manager: "Manager 與自訂節點由所連接的 ComfyUI 服務提供", cloudHint: "不需在 FRAME 內設定 API Key；Comfy Cloud 登入與用量由官方頁面處理。", selfHint: "建議使用 HTTPS 遠端 ComfyUI。http://127.0.0.1:8188 可在新視窗正常使用。", bridge: "來自 01 STORY 的創作內容已就緒", copyPrompt: "複製鏡頭提示詞", downloadWorkflow: "下載基礎工作流", copied: "提示詞已複製，可貼入 CLIP Text Encode 節點", downloaded: "基礎工作流已下載，把 JSON 拖入 ComfyUI 畫布即可", noPrompt: "尚未接收 01 STORY 內容", privacy: "FRAME 不會讀取 iframe 內的帳號、工作流、模型或密鑰。",
+  },
+  ja: {
+    title: "本物の ComfyUI ワークスペース。",
+    intro: "02 はノードを模倣しません。公式 ComfyUI または自分の ComfyUI ページを読み込み、ノード、モデル、キュー、履歴、Manager、拡張機能をそのまま利用します。",
+    cloud: "Comfy Cloud", self: "セルフホスト / ローカル", endpoint: "ComfyUI ページ URL", connect: "フルエディターを読込", open: "新しいウィンドウ", reload: "再読込", loaded: "ComfyUI エディターを読み込みました", loading: "公式 ComfyUI を読み込み中…", invalid: "有効な HTTPS URL を入力してください。ローカルは localhost / 127.0.0.1 のみ許可されます。", localOnly: "HTTPS ページ内にローカル HTTP は埋め込めません。新しいウィンドウでローカル ComfyUI を開いてください。", frameHelp: "ログインまたはキャンバスが表示されない場合は、新しいウィンドウでログインしてから再読込してください。", official: "公式フルフロントエンド", manager: "Manager とカスタムノードは接続先 ComfyUI が提供します", cloudHint: "FRAME に API Key は不要です。Cloud のログインと使用量は Comfy 公式ページで管理されます。", selfHint: "HTTPS のリモート ComfyUI を推奨します。http://127.0.0.1:8188 は新しいウィンドウで利用できます。", bridge: "01 STORY の内容を受け取りました", copyPrompt: "ショットプロンプトをコピー", downloadWorkflow: "基本ワークフローを保存", copied: "コピーしました。CLIP Text Encode に貼り付けてください", downloaded: "JSON を保存しました。ComfyUI キャンバスへドロップしてください", noPrompt: "01 STORY の内容はまだありません", privacy: "FRAME は iframe 内のアカウント、ワークフロー、モデル、キーを読み取りません。",
+  },
+  en: {
+    title: "The real ComfyUI workspace, inside FRAME.",
+    intro: "Module 02 no longer imitates nodes. It loads the official ComfyUI frontend or your own complete ComfyUI page, with real nodes, models, queue, history, Manager, and extensions.",
+    cloud: "Comfy Cloud", self: "Self-hosted / local", endpoint: "ComfyUI page URL", connect: "Load full editor", open: "Open in new window", reload: "Reload", loaded: "Real ComfyUI editor loaded", loading: "Loading official ComfyUI…", invalid: "Enter a valid HTTPS URL. Local HTTP is limited to localhost or 127.0.0.1.", localOnly: "Browsers block local HTTP pages inside an HTTPS site. Open local ComfyUI in a new window for full functionality.", frameHelp: "If the login or canvas does not appear, sign in in a new window first, then reload.", official: "Official full frontend", manager: "Manager and custom nodes come from the connected ComfyUI service", cloudHint: "No API key is stored in FRAME. Comfy Cloud handles sign-in and usage in the official page.", selfHint: "A remote HTTPS ComfyUI is recommended. http://127.0.0.1:8188 works in a new window.", bridge: "Creative content from 01 STORY is ready", copyPrompt: "Copy shot prompt", downloadWorkflow: "Download starter workflow", copied: "Copied. Paste it into a CLIP Text Encode node", downloaded: "Starter JSON downloaded. Drop it onto the ComfyUI canvas", noPrompt: "No content received from 01 STORY", privacy: "FRAME cannot read accounts, workflows, models, or keys inside the iframe.",
+  },
+} satisfies Record<Locale, Record<string, string>>;
 
-const COPY:Record<Locale,Record<string,string>>={
-  "zh-CN":{title:"把生成流程直接搭在画布上。",intro:"导入 ComfyUI API 工作流，拖动节点、编辑参数、连接端口，并发送到你自己的 ComfyUI 执行。这里不调用文字模型，不消耗语言模型 Token。",library:"节点库",connection:"执行连接",local:"自托管 ComfyUI",cloud:"Comfy Cloud",endpoint:"服务地址",token:"访问密钥（仅本次会话）",tokenHint:"密钥不会保存到本站账户或浏览器持久存储",connect:"测试连接",connecting:"正在连接…",connected:"连接成功",run:"加入队列",running:"工作流执行中…",cancel:"取消任务",import:"导入工作流",export:"导出 API JSON",reset:"新建工作流",fit:"适应画布",zoomIn:"放大",zoomOut:"缩小",open:"打开原始 ComfyUI",inspector:"节点检查器",selectNode:"选择一个节点以编辑输入参数",delete:"删除节点",duplicate:"复制节点",disconnect:"断开",connectFrom:"等待连接到输入端口",workflowReady:"工作流已就绪",workflowImported:"工作流已导入",workflowSaved:"工作流已导出",invalidWorkflow:"请选择由 ComfyUI“Save (API Format)”导出的 JSON 工作流",fileTooLarge:"工作流文件不能超过 2MB",emptyWorkflow:"画布中没有可以执行的节点",checkpointMissing:"请先在 Checkpoint 节点填写本机已有的模型文件名，或导入可执行工作流",endpointRequired:"请填写可从当前浏览器访问的 ComfyUI HTTPS 地址",cloudKeyRequired:"Comfy Cloud 需要 API Key",corsHint:"自托管服务需要 HTTPS，并允许此网站跨域访问；本机 8188 端口不能直接从线上服务器代理。",queued:"任务已加入 ComfyUI 队列",complete:"工作流执行完成",noOutput:"工作流完成，但没有发现可预览的媒体输出",failed:"ComfyUI 执行失败",storyInput:"已接收来自 01 的镜头提示词",results:"执行结果",emptyCanvas:"空画布",nodeCount:"{count} 个节点",apiFormat:"COMFYUI API FORMAT",unknownNode:"自定义节点"},
-  "zh-TW":{title:"把生成流程直接搭在畫布上。",intro:"匯入 ComfyUI API 工作流，拖動節點、編輯參數、連接端口，並傳送到自己的 ComfyUI 執行。此處不呼叫文字模型，不消耗語言模型 Token。",library:"節點庫",connection:"執行連接",local:"自架 ComfyUI",cloud:"Comfy Cloud",endpoint:"服務位址",token:"存取密鑰（僅本次工作階段）",tokenHint:"密鑰不會儲存到本站帳戶或瀏覽器永久空間",connect:"測試連接",connecting:"正在連接…",connected:"連接成功",run:"加入佇列",running:"工作流執行中…",cancel:"取消任務",import:"匯入工作流",export:"匯出 API JSON",reset:"新增工作流",fit:"適應畫布",zoomIn:"放大",zoomOut:"縮小",open:"開啟原始 ComfyUI",inspector:"節點檢查器",selectNode:"選擇節點以編輯輸入參數",delete:"刪除節點",duplicate:"複製節點",disconnect:"斷開",connectFrom:"等待連接到輸入端口",workflowReady:"工作流已就緒",workflowImported:"工作流已匯入",workflowSaved:"工作流已匯出",invalidWorkflow:"請選擇由 ComfyUI「Save (API Format)」匯出的 JSON 工作流",fileTooLarge:"工作流檔案不能超過 2MB",emptyWorkflow:"畫布中沒有可執行節點",checkpointMissing:"請在 Checkpoint 節點填寫本機已有模型檔名，或匯入可執行工作流",endpointRequired:"請填寫目前瀏覽器可存取的 ComfyUI HTTPS 位址",cloudKeyRequired:"Comfy Cloud 需要 API Key",corsHint:"自架服務需要 HTTPS 並允許本站跨域存取；線上網站不能直接代理本機 8188 端口。",queued:"任務已加入 ComfyUI 佇列",complete:"工作流執行完成",noOutput:"工作流完成，但沒有找到可預覽的媒體輸出",failed:"ComfyUI 執行失敗",storyInput:"已接收來自 01 的鏡頭提示詞",results:"執行結果",emptyCanvas:"空白畫布",nodeCount:"{count} 個節點",apiFormat:"COMFYUI API FORMAT",unknownNode:"自訂節點"},
-  ja:{title:"生成フローを、そのままキャンバスへ。",intro:"ComfyUI API ワークフローを読み込み、ノード移動、入力編集、接続、実行まで行えます。言語モデルは呼び出さないため、LLM トークンを消費しません。",library:"ノードライブラリ",connection:"実行接続",local:"セルフホスト ComfyUI",cloud:"Comfy Cloud",endpoint:"サービス URL",token:"アクセスキー（このセッションのみ）",tokenHint:"キーはサイトのアカウントや永続ストレージに保存されません",connect:"接続テスト",connecting:"接続中…",connected:"接続しました",run:"キューへ追加",running:"ワークフロー実行中…",cancel:"タスクをキャンセル",import:"ワークフロー読込",export:"API JSON 書出",reset:"新規ワークフロー",fit:"全体表示",zoomIn:"拡大",zoomOut:"縮小",open:"ComfyUI を開く",inspector:"ノードインスペクター",selectNode:"ノードを選択して入力値を編集",delete:"ノード削除",duplicate:"複製",disconnect:"切断",connectFrom:"入力ポートを選んで接続",workflowReady:"ワークフロー準備完了",workflowImported:"ワークフローを読み込みました",workflowSaved:"ワークフローを書き出しました",invalidWorkflow:"ComfyUI の「Save (API Format)」で書き出した JSON を選択してください",fileTooLarge:"ワークフローは 2MB 以下にしてください",emptyWorkflow:"実行できるノードがありません",checkpointMissing:"Checkpoint ノードにローカルのモデル名を入力するか、実行可能なワークフローを読み込んでください",endpointRequired:"ブラウザから接続できる ComfyUI HTTPS URL を入力してください",cloudKeyRequired:"Comfy Cloud API Key が必要です",corsHint:"セルフホストは HTTPS と CORS 許可が必要です。公開サイトからローカル 8188 番ポートを代理接続することはできません。",queued:"ComfyUI キューに追加しました",complete:"ワークフロー完了",noOutput:"完了しましたが、表示可能なメディア出力がありません",failed:"ComfyUI 実行に失敗しました",storyInput:"01 のショットプロンプトを受け取りました",results:"実行結果",emptyCanvas:"空のキャンバス",nodeCount:"{count} ノード",apiFormat:"COMFYUI API FORMAT",unknownNode:"カスタムノード"},
-  en:{title:"Build the generation flow on the canvas.",intro:"Import a ComfyUI API workflow, move nodes, edit inputs, connect ports, and run it on your own ComfyUI. No language model is called here, so this workspace uses no LLM tokens.",library:"Node library",connection:"Execution connection",local:"Self-hosted ComfyUI",cloud:"Comfy Cloud",endpoint:"Service URL",token:"Access key (this session only)",tokenHint:"The key is never saved to your FRAME account or persistent browser storage",connect:"Test connection",connecting:"Connecting…",connected:"Connected",run:"Queue workflow",running:"Workflow is running…",cancel:"Cancel job",import:"Import workflow",export:"Export API JSON",reset:"New workflow",fit:"Fit canvas",zoomIn:"Zoom in",zoomOut:"Zoom out",open:"Open full ComfyUI",inspector:"Node inspector",selectNode:"Select a node to edit its inputs",delete:"Delete node",duplicate:"Duplicate",disconnect:"Disconnect",connectFrom:"Choose an input port to complete the connection",workflowReady:"Workflow ready",workflowImported:"Workflow imported",workflowSaved:"Workflow exported",invalidWorkflow:"Choose JSON exported with ComfyUI “Save (API Format)”",fileTooLarge:"Workflow files must be 2MB or smaller",emptyWorkflow:"There are no executable nodes on the canvas",checkpointMissing:"Enter a model installed on your ComfyUI in the Checkpoint node, or import a runnable workflow",endpointRequired:"Enter a ComfyUI HTTPS URL reachable from this browser",cloudKeyRequired:"Comfy Cloud requires an API Key",corsHint:"Self-hosted servers need HTTPS and must allow cross-origin access from this site. The hosted site cannot proxy your local port 8188.",queued:"Added to the ComfyUI queue",complete:"Workflow complete",noOutput:"The workflow completed without a previewable media output",failed:"ComfyUI execution failed",storyInput:"Received a shot prompt from 01",results:"Execution results",emptyCanvas:"Empty canvas",nodeCount:"{count} nodes",apiFormat:"COMFYUI API FORMAT",unknownNode:"Custom node"},
-};
-
-const WORKBENCH_COPY:Record<Locale,Record<string,string>>={
-  "zh-CN":{importing:"正在读取工作流…",importApi:"API 工作流已导入",importUi:"画布工作流已转换并导入",importPartial:"已导入画布；连接 ComfyUI 后可校验自定义节点参数",dropImport:"把 ComfyUI JSON 拖到这里导入",selectTool:"选择与移动节点",panTool:"平移画布",center:"定位所选节点",snap:"网格吸附",links:"显示连线",minimap:"缩略导航",manager:"ComfyUI Manager",managerDefault:"默认管理入口",managerCheck:"检测 Manager",managerChecking:"正在检测…",managerReady:"Manager 已启用",managerMissing:"Manager 未启用",managerCloud:"由 Comfy Cloud 管理",managerHint:"用于发现缺失节点、安装节点包和管理模型。",managerGuide:"安装与启用说明",managerOpen:"打开 Manager",missingNodes:"缺少 {count} 种节点",desktop:"Desktop 版已默认包含并启用 Manager。",portable:"Portable / 手动版需要安装 Manager 依赖，并以 --enable-manager 启动。",copyCommand:"复制启用命令",copied:"命令已复制",close:"关闭",resize:"拖动以调整节点尺寸",formatApi:"API FORMAT",formatUi:"UI FORMAT · CONVERTED"},
-  "zh-TW":{importing:"正在讀取工作流…",importApi:"API 工作流已匯入",importUi:"畫布工作流已轉換並匯入",importPartial:"已匯入畫布；連接 ComfyUI 後可校驗自訂節點參數",dropImport:"把 ComfyUI JSON 拖到這裡匯入",selectTool:"選取與移動節點",panTool:"平移畫布",center:"定位所選節點",snap:"網格吸附",links:"顯示連線",minimap:"縮圖導航",manager:"ComfyUI Manager",managerDefault:"預設管理入口",managerCheck:"偵測 Manager",managerChecking:"正在偵測…",managerReady:"Manager 已啟用",managerMissing:"Manager 未啟用",managerCloud:"由 Comfy Cloud 管理",managerHint:"用於發現缺失節點、安裝節點套件和管理模型。",managerGuide:"安裝與啟用說明",managerOpen:"開啟 Manager",missingNodes:"缺少 {count} 種節點",desktop:"Desktop 版已預設包含並啟用 Manager。",portable:"Portable / 手動版需要安裝 Manager 依賴，並以 --enable-manager 啟動。",copyCommand:"複製啟用命令",copied:"命令已複製",close:"關閉",resize:"拖動以調整節點尺寸",formatApi:"API FORMAT",formatUi:"UI FORMAT · CONVERTED"},
-  ja:{importing:"ワークフローを読み込み中…",importApi:"API ワークフローを読み込みました",importUi:"UI ワークフローを変換して読み込みました",importPartial:"キャンバスを読み込みました。接続後にカスタムノードを検証できます",dropImport:"ComfyUI JSON をここへドロップ",selectTool:"ノード選択・移動",panTool:"キャンバス移動",center:"選択ノードを中央へ",snap:"グリッド吸着",links:"リンク表示",minimap:"ミニマップ",manager:"ComfyUI Manager",managerDefault:"標準管理入口",managerCheck:"Manager を確認",managerChecking:"確認中…",managerReady:"Manager 有効",managerMissing:"Manager 無効",managerCloud:"Comfy Cloud が管理",managerHint:"不足ノード、ノードパック、モデルを管理します。",managerGuide:"導入・有効化ガイド",managerOpen:"Manager を開く",missingNodes:"不足ノード {count} 種",desktop:"Desktop 版では Manager が同梱され、既定で有効です。",portable:"Portable / 手動版は依存関係を導入し、--enable-manager で起動します。",copyCommand:"有効化コマンドをコピー",copied:"コピーしました",close:"閉じる",resize:"ドラッグしてノードサイズ変更",formatApi:"API FORMAT",formatUi:"UI FORMAT · CONVERTED"},
-  en:{importing:"Reading workflow…",importApi:"API workflow imported",importUi:"Canvas workflow converted and imported",importPartial:"Canvas imported; connect ComfyUI to validate custom-node widgets",dropImport:"Drop a ComfyUI JSON file here",selectTool:"Select and move nodes",panTool:"Pan canvas",center:"Center selected node",snap:"Snap to grid",links:"Show links",minimap:"Minimap",manager:"ComfyUI Manager",managerDefault:"Default management entry",managerCheck:"Detect Manager",managerChecking:"Detecting…",managerReady:"Manager enabled",managerMissing:"Manager not enabled",managerCloud:"Managed by Comfy Cloud",managerHint:"Find missing nodes, install node packs, and manage models.",managerGuide:"Install and enable guide",managerOpen:"Open Manager",missingNodes:"{count} missing node types",desktop:"ComfyUI Desktop includes and enables Manager by default.",portable:"Portable and manual installs need Manager dependencies and the --enable-manager launch flag.",copyCommand:"Copy enable command",copied:"Command copied",close:"Close",resize:"Drag to resize node",formatApi:"API FORMAT",formatUi:"UI FORMAT · CONVERTED"},
-};
-
-export function comfyModuleCopy(locale:Locale){
-  return locale==="zh-CN"?{desc:"导入并编辑 ComfyUI 节点工作流，连接自己的 GPU 或 Comfy Cloud 直接执行。",enter:"进入工作流画布"}:locale==="zh-TW"?{desc:"匯入並編輯 ComfyUI 節點工作流，連接自己的 GPU 或 Comfy Cloud 直接執行。",enter:"進入工作流畫布"}:locale==="ja"?{desc:"ComfyUI ノードを編集し、自分の GPU または Comfy Cloud で直接実行します。",enter:"ワークフローを開く"}:{desc:"Import and edit ComfyUI node graphs, then run them on your GPU or Comfy Cloud.",enter:"Open workflow canvas"};
+export function comfyModuleCopy(locale: Locale) {
+  return locale === "zh-CN"
+    ? { desc: "直接使用官方 ComfyUI 完整画布、节点、模型、Manager 与扩展。", enter: "进入真实 ComfyUI" }
+    : locale === "zh-TW"
+      ? { desc: "直接使用官方 ComfyUI 完整畫布、節點、模型、Manager 與擴充。", enter: "進入真正 ComfyUI" }
+      : locale === "ja"
+        ? { desc: "公式 ComfyUI のキャンバス、ノード、モデル、Manager、拡張をそのまま使用します。", enter: "ComfyUI を開く" }
+        : { desc: "Use the official ComfyUI canvas, nodes, models, Manager, and extensions.", enter: "Open real ComfyUI" };
 }
 
-function definitionFor(type:string){return NODE_LIBRARY.find(item=>item.type===type)}
-function isConnection(value:ComfyValue):value is [string|number,number]{return Array.isArray(value)&&value.length===2&&(typeof value[0]==="string"||typeof value[0]==="number")&&typeof value[1]==="number"}
-function inputNames(node:ComfyNode){const defined=definitionFor(node.class_type)?.connections||[];return [...new Set([...defined,...Object.keys(node.inputs)])]}
-function outputsFor(node:ComfyNode,schemas:Record<string,ServerNodeSchema>){return definitionFor(node.class_type)?.outputs||schemas[node.class_type]?.output_name||["OUTPUT"]}
-function titleFor(node:ComfyNode){return node._meta?.title||definitionFor(node.class_type)?.title||node.class_type}
-function colorFor(node:ComfyNode){return definitionFor(node.class_type)?.color||"neutral"}
-function defaultNodeSize(node:ComfyNode):NodeSize{return{width:DEFAULT_NODE_WIDTH,height:Math.min(420,Math.max(MIN_NODE_HEIGHT,78+Math.max(inputNames(node).length,outputsFor(node,{}).length)*29))}}
+function isLocalHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+}
 
-function starterWorkflow(prompt=""):{workflow:ComfyWorkflow;positions:Record<string,Point>}{
-  const workflow:ComfyWorkflow={
-    "1":{class_type:"CheckpointLoaderSimple",inputs:{ckpt_name:""},_meta:{title:"Load Checkpoint"}},
-    "2":{class_type:"CLIPTextEncode",inputs:{text:prompt||"cinematic portrait, precise lighting, coherent anatomy",clip:["1",1]},_meta:{title:"Positive Prompt"}},
-    "3":{class_type:"CLIPTextEncode",inputs:{text:"low quality, deformed anatomy, text, watermark",clip:["1",1]},_meta:{title:"Negative Prompt"}},
-    "4":{class_type:"EmptyLatentImage",inputs:{width:1024,height:1024,batch_size:1}},
-    "5":{class_type:"KSampler",inputs:{seed:42,steps:24,cfg:7,sampler_name:"euler",scheduler:"normal",denoise:1,model:["1",0],positive:["2",0],negative:["3",0],latent_image:["4",0]}},
-    "6":{class_type:"VAEDecode",inputs:{samples:["5",0],vae:["1",2]}},
-    "7":{class_type:"SaveImage",inputs:{filename_prefix:"FRAME",images:["6",0]}},
+function safeEditorUrl(raw: string, frameHost = "") {
+  const value = raw.trim();
+  if (!value || value.length > 2048) return null;
+  const withProtocol = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : isLocalHost(value.split(":")[0]) ? `http://${value}` : `https://${value}`;
+  try {
+    const url = new URL(withProtocol);
+    if (url.username || url.password || (url.protocol !== "https:" && !(url.protocol === "http:" && isLocalHost(url.hostname)))) return null;
+    if (frameHost && url.hostname === frameHost) return null;
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function starterWorkflow(prompt: string) {
+  const positive = prompt.trim() || "cinematic scene, coherent composition, precise lighting";
+  return {
+    id: crypto.randomUUID(), revision: 0, last_node_id: 7, last_link_id: 9,
+    nodes: [
+      { id: 1, type: "CheckpointLoaderSimple", pos: [40, 250], size: [315, 98], flags: {}, order: 0, mode: 0, inputs: [], outputs: [{ name: "MODEL", type: "MODEL", links: [3] }, { name: "CLIP", type: "CLIP", links: [1, 2] }, { name: "VAE", type: "VAE", links: [8] }], properties: { "Node name for S&R": "CheckpointLoaderSimple" }, widgets_values: [""] },
+      { id: 2, type: "CLIPTextEncode", pos: [410, 80], size: [420, 200], flags: {}, order: 1, mode: 0, inputs: [{ name: "clip", type: "CLIP", link: 1 }], outputs: [{ name: "CONDITIONING", type: "CONDITIONING", links: [4] }], title: "FRAME · Positive Prompt", properties: { "Node name for S&R": "CLIPTextEncode" }, widgets_values: [positive] },
+      { id: 3, type: "CLIPTextEncode", pos: [410, 330], size: [420, 180], flags: {}, order: 2, mode: 0, inputs: [{ name: "clip", type: "CLIP", link: 2 }], outputs: [{ name: "CONDITIONING", type: "CONDITIONING", links: [5] }], title: "Negative Prompt", properties: { "Node name for S&R": "CLIPTextEncode" }, widgets_values: ["low quality, deformed anatomy, text, watermark"] },
+      { id: 4, type: "EmptyLatentImage", pos: [430, 580], size: [315, 106], flags: {}, order: 3, mode: 0, inputs: [], outputs: [{ name: "LATENT", type: "LATENT", links: [6] }], properties: { "Node name for S&R": "EmptyLatentImage" }, widgets_values: [1024, 1024, 1] },
+      { id: 5, type: "KSampler", pos: [900, 230], size: [315, 262], flags: {}, order: 4, mode: 0, inputs: [{ name: "model", type: "MODEL", link: 3 }, { name: "positive", type: "CONDITIONING", link: 4 }, { name: "negative", type: "CONDITIONING", link: 5 }, { name: "latent_image", type: "LATENT", link: 6 }], outputs: [{ name: "LATENT", type: "LATENT", links: [7] }], properties: { "Node name for S&R": "KSampler" }, widgets_values: [42, "randomize", 24, 7, "euler", "normal", 1] },
+      { id: 6, type: "VAEDecode", pos: [1280, 260], size: [210, 72], flags: {}, order: 5, mode: 0, inputs: [{ name: "samples", type: "LATENT", link: 7 }, { name: "vae", type: "VAE", link: 8 }], outputs: [{ name: "IMAGE", type: "IMAGE", links: [9] }], properties: { "Node name for S&R": "VAEDecode" }, widgets_values: [] },
+      { id: 7, type: "SaveImage", pos: [1560, 240], size: [320, 120], flags: {}, order: 6, mode: 0, inputs: [{ name: "images", type: "IMAGE", link: 9 }], outputs: [], properties: { "Node name for S&R": "SaveImage" }, widgets_values: ["FRAME"] },
+    ],
+    links: [[1, 1, 1, 2, 0, "CLIP"], [2, 1, 1, 3, 0, "CLIP"], [3, 1, 0, 5, 0, "MODEL"], [4, 2, 0, 5, 1, "CONDITIONING"], [5, 3, 0, 5, 2, "CONDITIONING"], [6, 4, 0, 5, 3, "LATENT"], [7, 5, 0, 6, 0, "LATENT"], [8, 1, 2, 6, 1, "VAE"], [9, 6, 0, 7, 0, "IMAGE"]],
+    groups: [], config: {}, extra: { ds: { scale: 0.78, offset: [70, 80] }, frontendVersion: "1.46.3" }, version: 0.4,
   };
-  const positions:Record<string,Point>={"1":{x:80,y:140},"2":{x:390,y:55},"3":{x:390,y:290},"4":{x:390,y:520},"5":{x:720,y:200},"6":{x:1030,y:220},"7":{x:1330,y:220}};
-  return{workflow,positions};
 }
 
-function autoLayout(workflow:ComfyWorkflow){const positions:Record<string,Point>={};Object.keys(workflow).forEach((id,index)=>{positions[id]={x:70+(index%4)*320,y:70+Math.floor(index/4)*285}});return positions}
-function defaultSizes(workflow:ComfyWorkflow){return Object.fromEntries(Object.entries(workflow).map(([id,node])=>[id,defaultNodeSize(node)])) as Record<string,NodeSize>}
+export default function ComfyWorkflowStudio({ locale, seedPrompt = "", pipelineTitle = "" }: { locale: Locale; seedPrompt?: string; seedVersion?: number; pipelineTitle?: string }) {
+  const text = COPY[locale];
+  const [mode, setMode] = useState<"cloud" | "self">("cloud");
+  const [endpoint, setEndpoint] = useState("http://127.0.0.1:8188");
+  const [editorUrl, setEditorUrl] = useState(COMFY_CLOUD_URL);
+  const [frameKey, setFrameKey] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [launchOnly, setLaunchOnly] = useState(false);
+  const [status, setStatus] = useState(text.loading);
 
-function normalizeWorkflow(raw:unknown):ComfyWorkflow{
-  const wrapper=raw&&typeof raw==="object"&&!Array.isArray(raw)?raw as Record<string,unknown>:null;
-  const candidate=wrapper?.prompt&&typeof wrapper.prompt==="object"?wrapper.prompt:wrapper;
-  if(!candidate||Array.isArray(candidate)||Array.isArray((candidate as Record<string,unknown>).nodes))throw new Error("API_FORMAT_REQUIRED");
-  const entries=Object.entries(candidate);
-  if(!entries.length||entries.length>800)throw new Error("API_FORMAT_REQUIRED");
-  const result:ComfyWorkflow=Object.create(null);
-  for(const [id,value] of entries){
-    if(["__proto__","prototype","constructor"].includes(id)||!value||typeof value!=="object"||Array.isArray(value))throw new Error("API_FORMAT_REQUIRED");
-    const node=value as Record<string,unknown>;if(typeof node.class_type!=="string"||node.class_type.length>180||!node.inputs||typeof node.inputs!=="object"||Array.isArray(node.inputs))throw new Error("API_FORMAT_REQUIRED");
-    const meta=node._meta&&typeof node._meta==="object"?node._meta as Record<string,unknown>:null;
-    result[id]={class_type:node.class_type,inputs:structuredClone(node.inputs) as Record<string,ComfyValue>,_meta:typeof meta?.title==="string"?{title:meta.title.slice(0,180)}:undefined};
-  }
-  return result;
-}
+  const activePrompt = seedPrompt.trim();
 
-function pair(value:unknown):[number,number]|null{
-  if(Array.isArray(value)&&Number.isFinite(Number(value[0]))&&Number.isFinite(Number(value[1])))return[Number(value[0]),Number(value[1])];
-  if(value&&typeof value==="object"){const record=value as Record<string,unknown>;if(Number.isFinite(Number(record[0]))&&Number.isFinite(Number(record[1])))return[Number(record[0]),Number(record[1])];}
-  return null;
-}
-
-function schemaWidgetNames(schema:ServerNodeSchema|undefined,portNames:Set<string>){
-  const input=schema?.input;const ordered=[...Object.keys(input?.required||{}),...Object.keys(input?.optional||{})];
-  return ordered.filter(name=>!portNames.has(name));
-}
-
-function normalizedWidgetValues(type:string,values:unknown[]){
-  if(type==="KSampler"&&values.length>=7&&typeof values[1]==="string"&&["fixed","increment","decrement","randomize"].includes(values[1]))return[values[0],...values.slice(2)];
-  return values;
-}
-
-function normalizeUiWorkflow(raw:Record<string,unknown>,schemas:Record<string,ServerNodeSchema>){
-  const nodes=Array.isArray(raw.nodes)?raw.nodes:[];const rawLinks=Array.isArray(raw.links)?raw.links:[];
-  if(!nodes.length||nodes.length>800)throw new Error("UI_FORMAT_REQUIRED");
-  const links=new Map<string,unknown[]>();for(const value of rawLinks)if(Array.isArray(value)&&value.length>=5)links.set(String(value[0]),value);
-  const workflow:ComfyWorkflow=Object.create(null);const positions:Record<string,Point>={};const sizes:Record<string,NodeSize>={};let partial=false;
-  for(const value of nodes){
-    if(!value||typeof value!=="object"||Array.isArray(value))continue;const rawNode=value as Record<string,unknown>;const id=String(rawNode.id??"");const type=String(rawNode.type||"");
-    if(!id||!type||["__proto__","prototype","constructor"].includes(id))continue;
-    const inputPorts=Array.isArray(rawNode.inputs)?rawNode.inputs.filter(item=>item&&typeof item==="object") as Record<string,unknown>[]:[];
-    const inputs:Record<string,ComfyValue>=Object.create(null);const portNames=new Set(inputPorts.map(item=>String(item.name||"")).filter(Boolean));
-    for(const port of inputPorts){const name=String(port.name||"");if(!name||port.link===null||port.link===undefined)continue;const link=links.get(String(port.link));if(link)inputs[name]=[String(link[1]),Number(link[2])];}
-    const definition=definitionFor(type);const widgets=normalizedWidgetValues(type,Array.isArray(rawNode.widgets_values)?rawNode.widgets_values:[]);const widgetNames=definition?.widgets||schemaWidgetNames(schemas[type],portNames);
-    if(widgets.length&&!widgetNames.length){partial=true;widgets.forEach((widget,index)=>{inputs[`widget_${index+1}`]=structuredClone(widget) as ComfyValue});}
-    else widgets.forEach((widget,index)=>{const name=widgetNames[index];if(name)inputs[name]=structuredClone(widget) as ComfyValue});
-    if(definition)for(const [name,defaultValue] of Object.entries(definition.inputs))if(!(name in inputs)&&!definition.connections.includes(name))inputs[name]=structuredClone(defaultValue);
-    const properties=rawNode.properties&&typeof rawNode.properties==="object"?rawNode.properties as Record<string,unknown>:{};const title=typeof rawNode.title==="string"?rawNode.title:typeof properties["Node name for S&R"]==="string"?String(properties["Node name for S&R"]):type;
-    workflow[id]={class_type:type,inputs,_meta:{title:title.slice(0,180)}};
-    const position=pair(rawNode.pos)||[70,70];const size=pair(rawNode.size)||[DEFAULT_NODE_WIDTH,defaultNodeSize(workflow[id]).height];positions[id]={x:Math.max(-10000,Math.min(10000,position[0])),y:Math.max(-10000,Math.min(10000,position[1]))};sizes[id]={width:Math.max(MIN_NODE_WIDTH,Math.min(MAX_NODE_WIDTH,size[0])),height:Math.max(MIN_NODE_HEIGHT,Math.min(MAX_NODE_HEIGHT,size[1]))};
-  }
-  if(!Object.keys(workflow).length)throw new Error("UI_FORMAT_REQUIRED");return{workflow,positions,sizes,format:"ui" as const,partial};
-}
-
-function normalizeWorkflowPayload(raw:unknown,schemas:Record<string,ServerNodeSchema>){
-  const record=raw&&typeof raw==="object"&&!Array.isArray(raw)?raw as Record<string,unknown>:null;
-  const nested=record?.workflow&&typeof record.workflow==="object"&&!Array.isArray(record.workflow)?record.workflow as Record<string,unknown>:null;
-  if(nested&&Array.isArray(nested.nodes))return normalizeUiWorkflow(nested,schemas);
-  if(record&&Array.isArray(record.nodes))return normalizeUiWorkflow(record,schemas);
-  const workflow=normalizeWorkflow(raw);return{workflow,positions:autoLayout(workflow),sizes:defaultSizes(workflow),format:"api" as const,partial:false};
-}
-
-function nextNodeId(workflow:ComfyWorkflow){const numeric=Object.keys(workflow).map(Number).filter(Number.isFinite);return String((numeric.length?Math.max(...numeric):0)+1)}
-function normalizePositions(raw:unknown,workflow:ComfyWorkflow){if(!raw||typeof raw!=="object"||Array.isArray(raw))return autoLayout(workflow);const fallback=autoLayout(workflow);for(const id of Object.keys(workflow)){const value=(raw as Record<string,unknown>)[id];if(!value||typeof value!=="object"||Array.isArray(value))continue;const point=value as Record<string,unknown>;if(Number.isFinite(point.x)&&Number.isFinite(point.y))fallback[id]={x:Math.max(-4000,Math.min(4000,Number(point.x))),y:Math.max(-4000,Math.min(4000,Number(point.y)))}}return fallback}
-function normalizeSizes(raw:unknown,workflow:ComfyWorkflow){const fallback=defaultSizes(workflow);if(!raw||typeof raw!=="object"||Array.isArray(raw))return fallback;for(const id of Object.keys(workflow)){const value=(raw as Record<string,unknown>)[id];if(!value||typeof value!=="object"||Array.isArray(value))continue;const size=value as Record<string,unknown>;if(Number.isFinite(size.width)&&Number.isFinite(size.height))fallback[id]={width:Math.max(MIN_NODE_WIDTH,Math.min(MAX_NODE_WIDTH,Number(size.width))),height:Math.max(MIN_NODE_HEIGHT,Math.min(MAX_NODE_HEIGHT,Number(size.height)))}}return fallback}
-function replaceTemplate(value:string,count:number){return value.replace("{count}",String(count))}
-function baseEndpoint(value:string){return value.trim().replace(/\/+$/,"")}
-function validEndpoint(value:string,cloud:boolean){try{const url=new URL(value);return url.protocol==="https:"&&(cloud?url.hostname==="cloud.comfy.org":true)&&!url.username&&!url.password}catch{return false}}
-
-function extractOutputFiles(outputs:unknown){
-  const files:Array<{filename:string;subfolder:string;type:string;kind:"image"|"video"|"audio"}>=[];
-  if(!outputs||typeof outputs!=="object")return files;
-  for(const output of Object.values(outputs as Record<string,unknown>)){
-    if(!output||typeof output!=="object")continue;
-    const record=output as Record<string,unknown>;
-    for(const [key,kind] of [["images","image"],["gifs","image"],["videos","video"],["audio","audio"]] as const){
-      const list=record[key];if(!Array.isArray(list))continue;
-      for(const item of list){if(item&&typeof item==="object"&&typeof (item as Record<string,unknown>).filename==="string")files.push({filename:String((item as Record<string,unknown>).filename),subfolder:String((item as Record<string,unknown>).subfolder||""),type:String((item as Record<string,unknown>).type||"output"),kind})}
-    }
-  }
-  return files;
-}
-
-function ValueEditor({value,onChange}:{value:ComfyValue;onChange:(value:ComfyValue)=>void}){
-  const [draft,setDraft]=useState(()=>typeof value==="object"&&value!==null?JSON.stringify(value):String(value??""));
-  useEffect(()=>{let cancelled=false;queueMicrotask(()=>{if(!cancelled)setDraft(typeof value==="object"&&value!==null?JSON.stringify(value):String(value??""))});return()=>{cancelled=true}},[value]);
-  if(typeof value==="boolean")return <button className={`comfy-bool ${value?"on":""}`} onClick={()=>onChange(!value)}><i/>{String(value)}</button>;
-  if(typeof value==="number")return <input type="number" value={Number.isFinite(Number(draft))?draft:""} onChange={event=>{setDraft(event.target.value);const next=Number(event.target.value);if(Number.isFinite(next))onChange(next)}}/>;
-  if(typeof value==="string"&&(value.length>44||value.includes("\n")))return <textarea value={draft} onChange={event=>{setDraft(event.target.value);onChange(event.target.value)}}/>;
-  if(typeof value==="object"&&value!==null)return <textarea value={draft} onChange={event=>setDraft(event.target.value)} onBlur={()=>{try{onChange(JSON.parse(draft) as ComfyValue)}catch{setDraft(JSON.stringify(value))}}}/>;
-  return <input value={draft} onChange={event=>{setDraft(event.target.value);onChange(event.target.value)}}/>;
-}
-
-export default function ComfyWorkflowStudio({locale,seedPrompt="",seedVersion=0,pipelineTitle=""}:{locale:Locale;seedPrompt?:string;seedVersion?:number;pipelineTitle?:string}){
-  const text={...COPY[locale],...WORKBENCH_COPY[locale]};const initial=useMemo(()=>starterWorkflow(),[]);
-  const unresolvedImportMessage=locale==="zh-CN"?"画布已导入；请先连接 ComfyUI，再重新导入一次以匹配自定义节点参数":locale==="zh-TW"?"畫布已匯入；請先連接 ComfyUI，再重新匯入一次以匹配自訂節點參數":locale==="ja"?"キャンバスを読み込みました。ComfyUI 接続後に再読込してカスタムノードを一致させてください":"Canvas imported. Connect ComfyUI, then import it again to map custom-node widgets.";
-  const [workflow,setWorkflow]=useState<ComfyWorkflow>(initial.workflow);const [positions,setPositions]=useState<Record<string,Point>>(initial.positions);const [sizes,setSizes]=useState<Record<string,NodeSize>>(()=>defaultSizes(initial.workflow));const [selectedId,setSelectedId]=useState("2");
-  const [pan,setPan]=useState<Point>({x:45,y:30});const [zoom,setZoom]=useState(.78);const [connectionSource,setConnectionSource]=useState<ConnectionSource>(null);const [restored,setRestored]=useState(false);
-  const [serverMode,setServerMode]=useState<"local"|"cloud">("local");const [endpoint,setEndpoint]=useState("https://your-comfyui.example.com");const [token,setToken]=useState("");const [authMode,setAuthMode]=useState<"none"|"bearer"|"x-api-key">("none");const [showToken,setShowToken]=useState(false);
-  const [status,setStatus]=useState(text.workflowReady);const [connected,setConnected]=useState(false);const [running,setRunning]=useState(false);const [promptId,setPromptId]=useState("");const [results,setResults]=useState<ResultAsset[]>([]);
-  const [canvasTool,setCanvasTool]=useState<"select"|"pan">("select");const [snapToGrid,setSnapToGrid]=useState(false);const [showLinks,setShowLinks]=useState(true);const [showMinimap,setShowMinimap]=useState(true);const [isDragOver,setIsDragOver]=useState(false);const [workflowFormat,setWorkflowFormat]=useState<"api"|"ui">("api");
-  const [notice,setNotice]=useState<{kind:"ok"|"error"|"info";message:string}|null>(null);const [managerGuide,setManagerGuide]=useState(false);const [managerState,setManagerState]=useState<"unknown"|"checking"|"ready"|"missing"|"cloud">("unknown");const [serverSchemas,setServerSchemas]=useState<Record<string,ServerNodeSchema>>({});
-  const [canvasSize,setCanvasSize]=useState({width:900,height:600});
-  const canvasRef=useRef<HTMLDivElement>(null);const fileRef=useRef<HTMLInputElement>(null);const dragRef=useRef<DragState>(null);const runRef=useRef(0);const resultUrlsRef=useRef<string[]>([]);
-
-  useEffect(()=>{let cancelled=false;queueMicrotask(()=>{if(cancelled)return;try{const saved=localStorage.getItem("frame-comfy-workflow-v1");const savedPositions=localStorage.getItem("frame-comfy-positions-v1");const savedSizes=localStorage.getItem("frame-comfy-sizes-v1");const savedMode=localStorage.getItem("frame-comfy-mode-v1");const savedEndpoint=localStorage.getItem("frame-comfy-endpoint-v1");if(saved){const next=normalizeWorkflow(JSON.parse(saved));setWorkflow(next);setPositions(normalizePositions(savedPositions?JSON.parse(savedPositions):null,next));setSizes(normalizeSizes(savedSizes?JSON.parse(savedSizes):null,next));setSelectedId(Object.keys(next)[0]||"")}if(savedMode==="cloud"||savedMode==="local")setServerMode(savedMode);if(savedEndpoint)setEndpoint(savedEndpoint)}catch{}finally{setRestored(true)}});return()=>{cancelled=true}},[]);
-  useEffect(()=>{if(!restored)return;localStorage.setItem("frame-comfy-workflow-v1",JSON.stringify(workflow));localStorage.setItem("frame-comfy-positions-v1",JSON.stringify(positions));localStorage.setItem("frame-comfy-sizes-v1",JSON.stringify(sizes))},[workflow,positions,sizes,restored]);
-  useEffect(()=>{if(!restored)return;localStorage.setItem("frame-comfy-mode-v1",serverMode);localStorage.setItem("frame-comfy-endpoint-v1",endpoint)},[serverMode,endpoint,restored]);
-  useEffect(()=>{if(!seedVersion||!seedPrompt.trim())return;let cancelled=false;queueMicrotask(()=>{if(cancelled)return;setWorkflow(current=>{const next=structuredClone(current);const target=Object.entries(next).find(([,node])=>node.class_type==="CLIPTextEncode"&&!/negative/i.test(node._meta?.title||""));if(target)target[1].inputs.text=seedPrompt.trim();else{const id=nextNodeId(next);next[id]={class_type:"CLIPTextEncode",inputs:{text:seedPrompt.trim(),clip:null},_meta:{title:"Story Prompt"}};setPositions(currentPositions=>({...currentPositions,[id]:{x:400,y:100}}));setSizes(currentSizes=>({...currentSizes,[id]:defaultNodeSize(next[id])}));setSelectedId(id)}return next});setStatus(text.storyInput)});return()=>{cancelled=true}},[seedVersion,seedPrompt,text.storyInput]);
-  useEffect(()=>()=>{for(const url of resultUrlsRef.current)URL.revokeObjectURL(url)},[]);
-  useEffect(()=>{const element=canvasRef.current;if(!element)return;const observer=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(rect)setCanvasSize({width:rect.width,height:rect.height})});observer.observe(element);return()=>observer.disconnect()},[]);
-  useEffect(()=>{if(!notice)return;const timeout=window.setTimeout(()=>setNotice(null),4200);return()=>window.clearTimeout(timeout)},[notice]);
-  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{const target=event.target as HTMLElement|null;if(target?.matches("input,textarea,select,[contenteditable='true']"))return;if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="o"){event.preventDefault();fileRef.current?.click();return}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="s"){event.preventDefault();exportWorkflow();return}if((event.key==="Delete"||event.key==="Backspace")&&selectedId){event.preventDefault();deleteNode(selectedId)}if(event.key==="Escape"){setConnectionSource(null);setManagerGuide(false)}if(event.code==="Space")setCanvasTool("pan")};const onKeyUp=(event:KeyboardEvent)=>{if(event.code==="Space")setCanvasTool("select")};window.addEventListener("keydown",onKey);window.addEventListener("keyup",onKeyUp);return()=>{window.removeEventListener("keydown",onKey);window.removeEventListener("keyup",onKeyUp)}});
-
-  const selected=selectedId?workflow[selectedId]:undefined;
-  const edges=useMemo(()=>Object.entries(workflow).flatMap(([targetId,node])=>inputNames(node).flatMap((name,inputIndex)=>{const value=node.inputs[name];return isConnection(value)&&workflow[String(value[0])]? [{sourceId:String(value[0]),output:value[1],targetId,inputName:name,inputIndex}]:[]})),[workflow]);
-  const graphBounds=useMemo(()=>{const ids=Object.keys(workflow);if(!ids.length)return{minX:0,minY:0,maxX:1000,maxY:700,width:1000,height:700};const minX=Math.min(...ids.map(id=>(positions[id]?.x||0)-80));const minY=Math.min(...ids.map(id=>(positions[id]?.y||0)-80));const maxX=Math.max(...ids.map(id=>(positions[id]?.x||0)+(sizes[id]?.width||DEFAULT_NODE_WIDTH)+80));const maxY=Math.max(...ids.map(id=>(positions[id]?.y||0)+(sizes[id]?.height||MIN_NODE_HEIGHT)+80));return{minX,minY,maxX,maxY,width:Math.max(1,maxX-minX),height:Math.max(1,maxY-minY)}},[workflow,positions,sizes]);
-  const missingNodeTypes=useMemo(()=>Object.values(workflow).map(node=>node.class_type).filter((type,index,array)=>array.indexOf(type)===index&&Object.keys(serverSchemas).length>0&&!serverSchemas[type]),[workflow,serverSchemas]);
-
-  function updateNode(id:string,mutate:(node:ComfyNode)=>void){setWorkflow(current=>{const next=structuredClone(current);if(next[id])mutate(next[id]);return next})}
-  function addNode(definition:NodeDefinition){const id=nextNodeId(workflow);const node={class_type:definition.type,inputs:structuredClone(definition.inputs),_meta:{title:definition.title}};setWorkflow(current=>({...current,[id]:node}));const rect=canvasRef.current?.getBoundingClientRect();setPositions(current=>({...current,[id]:{x:Math.max(40,((rect?.width||900)/2-pan.x)/zoom-120),y:Math.max(40,((rect?.height||600)/2-pan.y)/zoom-80)}}));setSizes(current=>({...current,[id]:defaultNodeSize(node)}));setSelectedId(id);setStatus(`${definition.title} · ${text.workflowReady}`)}
-  function deleteNode(id:string){setWorkflow(current=>{const next=structuredClone(current);delete next[id];for(const node of Object.values(next))for(const [name,value] of Object.entries(node.inputs))if(isConnection(value)&&String(value[0])===id)delete node.inputs[name];return next});setPositions(current=>{const next={...current};delete next[id];return next});setSizes(current=>{const next={...current};delete next[id];return next});setSelectedId(current=>current===id?"":current);setConnectionSource(current=>current?.nodeId===id?null:current)}
-  function duplicateNode(id:string){const node=workflow[id];if(!node)return;const nextId=nextNodeId(workflow);setWorkflow(current=>({...current,[nextId]:structuredClone(node)}));const origin=positions[id]||{x:80,y:80};setPositions(current=>({...current,[nextId]:{x:origin.x+36,y:origin.y+42}}));setSizes(current=>({...current,[nextId]:{...(current[id]||defaultNodeSize(node))}}));setSelectedId(nextId)}
-  function connectInput(targetId:string,inputName:string){if(!connectionSource){const existing=workflow[targetId]?.inputs[inputName];if(isConnection(existing))updateNode(targetId,node=>{delete node.inputs[inputName]});return}if(connectionSource.nodeId===targetId){setStatus(text.failed);return}updateNode(targetId,node=>{node.inputs[inputName]=[connectionSource.nodeId,connectionSource.output]});setConnectionSource(null);setSelectedId(targetId)}
-  function startPan(event:ReactPointerEvent<HTMLElement>){canvasRef.current?.setPointerCapture(event.pointerId);dragRef.current={kind:"pan",pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,origin:pan}}
-  function onNodePointerDown(event:ReactPointerEvent<HTMLElement>,nodeId:string){if(event.button!==0)return;event.stopPropagation();if(canvasTool==="pan"){startPan(event);return}setSelectedId(nodeId);canvasRef.current?.setPointerCapture(event.pointerId);dragRef.current={kind:"node",pointerId:event.pointerId,nodeId,startX:event.clientX,startY:event.clientY,origin:positions[nodeId]||{x:0,y:0}}}
-  function onResizePointerDown(event:ReactPointerEvent<HTMLButtonElement>,nodeId:string){if(event.button!==0)return;event.preventDefault();event.stopPropagation();setSelectedId(nodeId);canvasRef.current?.setPointerCapture(event.pointerId);dragRef.current={kind:"resize",pointerId:event.pointerId,nodeId,startX:event.clientX,startY:event.clientY,origin:sizes[nodeId]||defaultNodeSize(workflow[nodeId])}}
-  function onCanvasPointerDown(event:ReactPointerEvent<HTMLDivElement>){if(event.button!==0||((event.target as HTMLElement).closest("button,input,textarea,select,.comfy-node")))return;canvasRef.current?.setPointerCapture(event.pointerId);dragRef.current={kind:"pan",pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,origin:pan};setSelectedId("")}
-  function onCanvasPointerMove(event:ReactPointerEvent<HTMLDivElement>){const drag=dragRef.current;if(!drag||drag.pointerId!==event.pointerId)return;if(drag.kind==="pan"){setPan({x:drag.origin.x+event.clientX-drag.startX,y:drag.origin.y+event.clientY-drag.startY});return}if(drag.kind==="resize"){const width=Math.max(MIN_NODE_WIDTH,Math.min(MAX_NODE_WIDTH,drag.origin.width+(event.clientX-drag.startX)/zoom));const height=Math.max(MIN_NODE_HEIGHT,Math.min(MAX_NODE_HEIGHT,drag.origin.height+(event.clientY-drag.startY)/zoom));setSizes(current=>({...current,[drag.nodeId]:{width:snapToGrid?Math.round(width/10)*10:width,height:snapToGrid?Math.round(height/10)*10:height}}));return}const rawX=drag.origin.x+(event.clientX-drag.startX)/zoom;const rawY=drag.origin.y+(event.clientY-drag.startY)/zoom;setPositions(current=>({...current,[drag.nodeId]:{x:snapToGrid?Math.round(rawX/20)*20:rawX,y:snapToGrid?Math.round(rawY/20)*20:rawY}}))}
-  function onCanvasPointerUp(event:ReactPointerEvent<HTMLDivElement>){if(dragRef.current?.pointerId===event.pointerId)dragRef.current=null;try{canvasRef.current?.releasePointerCapture(event.pointerId)}catch{}}
-  function setZoomAround(nextZoom:number,screenX=canvasSize.width/2,screenY=canvasSize.height/2){const safe=Math.max(.25,Math.min(2,nextZoom));const worldX=(screenX-pan.x)/zoom;const worldY=(screenY-pan.y)/zoom;setZoom(safe);setPan({x:screenX-worldX*safe,y:screenY-worldY*safe})}
-  function onWheel(event:ReactWheelEvent<HTMLDivElement>){event.preventDefault();const rect=canvasRef.current?.getBoundingClientRect();setZoomAround(zoom*(event.deltaY>0?.9:1.1),event.clientX-(rect?.left||0),event.clientY-(rect?.top||0))}
-  function fitGraph(nextPositions=positions,nextSizes=sizes,nextWorkflow=workflow){const ids=Object.keys(nextWorkflow);if(!ids.length){setPan({x:40,y:40});setZoom(1);return}const minX=Math.min(...ids.map(id=>nextPositions[id]?.x||0));const maxX=Math.max(...ids.map(id=>(nextPositions[id]?.x||0)+(nextSizes[id]?.width||DEFAULT_NODE_WIDTH)));const minY=Math.min(...ids.map(id=>nextPositions[id]?.y||0));const maxY=Math.max(...ids.map(id=>(nextPositions[id]?.y||0)+(nextSizes[id]?.height||MIN_NODE_HEIGHT)));const rect=canvasRef.current?.getBoundingClientRect();if(!rect)return;const nextZoom=Math.max(.25,Math.min(1.25,Math.min((rect.width-100)/Math.max(1,maxX-minX),(rect.height-100)/Math.max(1,maxY-minY))));setZoom(nextZoom);setPan({x:(rect.width-(minX+maxX)*nextZoom)/2,y:(rect.height-(minY+maxY)*nextZoom)/2})}
-  function fitCanvas(){fitGraph()}
-  function centerSelected(){if(!selectedId)return;const position=positions[selectedId];const size=sizes[selectedId];if(!position||!size)return;setPan({x:canvasSize.width/2-(position.x+size.width/2)*zoom,y:canvasSize.height/2-(position.y+size.height/2)*zoom})}
-  function resetWorkflow(){const next=starterWorkflow(seedPrompt);setWorkflow(next.workflow);setPositions(next.positions);setSizes(defaultSizes(next.workflow));setSelectedId("2");setPan({x:45,y:30});setZoom(.78);setWorkflowFormat("api");setResults([]);setStatus(text.workflowReady)}
-  async function importWorkflow(file:File){setStatus(text.importing);if(file.size>10*1024*1024){const message=locale==="zh-CN"?"工作流文件不能超过 10MB":locale==="zh-TW"?"工作流檔案不能超過 10MB":locale==="ja"?"ワークフローは 10MB 以下にしてください":"Workflow files must be 10MB or smaller";setStatus(message);setNotice({kind:"error",message});return}try{const next=normalizeWorkflowPayload(JSON.parse(await file.text()),serverSchemas);setWorkflow(next.workflow);setPositions(next.positions);setSizes(next.sizes);setWorkflowFormat(next.format);setSelectedId(Object.keys(next.workflow)[0]||"");setResults([]);setPan({x:35,y:35});setZoom(.72);const message=next.format==="ui"?(next.partial?unresolvedImportMessage:text.importUi):text.importApi;setStatus(`${file.name} · ${message}`);setNotice({kind:next.partial?"info":"ok",message});window.setTimeout(()=>fitGraph(next.positions,next.sizes,next.workflow),0)}catch{setStatus(text.invalidWorkflow);setNotice({kind:"error",message:text.invalidWorkflow})}}
-  function exportWorkflow(){const blob=new Blob([JSON.stringify(workflow,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const anchor=document.createElement("a");anchor.href=url;anchor.download=`FRAME-ComfyUI-API-${new Date().toISOString().slice(0,10)}.json`;anchor.click();URL.revokeObjectURL(url);setStatus(text.workflowSaved)}
-  function switchServerMode(mode:"local"|"cloud"){setServerMode(mode);setConnected(false);setServerSchemas({});setManagerState(mode==="cloud"?"cloud":"unknown");setToken("");if(mode==="cloud"){setEndpoint("https://cloud.comfy.org");setAuthMode("x-api-key")}else{setEndpoint(current=>current.includes("cloud.comfy.org")?"https://your-comfyui.example.com":current);setAuthMode("none")}}
-  function requestHeaders(json=false){const headers:Record<string,string>={};if(json)headers["Content-Type"]="application/json";if(token.trim()){if(serverMode==="cloud"||authMode==="x-api-key")headers["X-API-Key"]=token.trim();else if(authMode==="bearer")headers.Authorization=`Bearer ${token.trim()}`}return headers}
-  function apiUrl(path:string){const base=baseEndpoint(endpoint);return serverMode==="cloud"?`${base}/api${path}`:`${base}${path}`}
-  function validateConnection(){if(!validEndpoint(baseEndpoint(endpoint),serverMode==="cloud")){setStatus(text.endpointRequired);return false}if(serverMode==="cloud"&&!token.trim()){setStatus(text.cloudKeyRequired);return false}return true}
-  function openComfy(){const target=baseEndpoint(endpoint);if(!validEndpoint(target,serverMode==="cloud")){setStatus(text.endpointRequired);setNotice({kind:"error",message:text.endpointRequired});return}window.open(target,"_blank","noopener,noreferrer")}
-  async function detectManager(silent=false){if(serverMode==="cloud"){setManagerState("cloud");return}if(!validEndpoint(baseEndpoint(endpoint),false)){if(!silent)setStatus(text.endpointRequired);return}setManagerState("checking");for(const path of ["/manager/queue/status","/manager/version"]){try{const response=await fetch(`${baseEndpoint(endpoint)}${path}`,{headers:requestHeaders(),signal:AbortSignal.timeout(8000)});if(response.ok){setManagerState("ready");return}}catch{}}setManagerState("missing")}
-  async function testConnection(){if(!validateConnection())return;setConnected(false);setServerSchemas({});setStatus(text.connecting);try{const response=await fetch(apiUrl("/object_info"),{headers:requestHeaders(),signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error(`${response.status}`);const info=await response.json().catch(()=>({}));if(!info||typeof info!=="object"||Array.isArray(info))throw new Error("INVALID_OBJECT_INFO");setServerSchemas(info as Record<string,ServerNodeSchema>);setConnected(true);setStatus(text.connected);void detectManager(true)}catch(error){setManagerState("unknown");setStatus(`${text.failed} · ${error instanceof Error?error.message:"NETWORK"}`)}}
-  async function copyManagerCommand(){const command=".\\python_embeded\\python.exe -m pip install -r ComfyUI\\manager_requirements.txt\n.\\python_embeded\\python.exe -s ComfyUI\\main.py --windows-standalone-build --enable-manager";try{await navigator.clipboard.writeText(command);setNotice({kind:"ok",message:text.copied})}catch{setNotice({kind:"error",message:command})}}
-  async function loadResults(outputs:unknown){for(const url of resultUrlsRef.current)URL.revokeObjectURL(url);resultUrlsRef.current=[];const files=extractOutputFiles(outputs);const loaded:ResultAsset[]=[];for(const file of files.slice(0,16)){try{const params=new URLSearchParams({filename:file.filename,subfolder:file.subfolder,type:file.type});const response=await fetch(`${apiUrl("/view")}?${params}`,{headers:requestHeaders(),signal:AbortSignal.timeout(30000)});if(!response.ok)continue;const url=URL.createObjectURL(await response.blob());resultUrlsRef.current.push(url);loaded.push({url,name:file.filename,kind:file.kind})}catch{}}setResults(loaded);setStatus(loaded.length?text.complete:text.noOutput)}
-  async function runWorkflow(){
-    if(running||!validateConnection())return;
-    if(!Object.keys(workflow).length){setStatus(text.emptyWorkflow);return}
-    if(Object.values(workflow).some(node=>Object.keys(node.inputs).some(name=>/^widget_\d+$/.test(name)))){setStatus(unresolvedImportMessage);setNotice({kind:"info",message:unresolvedImportMessage});return}
-    const blankCheckpoint=Object.values(workflow).find(node=>node.class_type==="CheckpointLoaderSimple"&&!String(node.inputs.ckpt_name||"").trim());
-    if(blankCheckpoint){setStatus(text.checkpointMissing);return}
-    const runId=++runRef.current;setRunning(true);setResults([]);setStatus(text.queued);
-    try{
-      const response=await fetch(apiUrl("/prompt"),{method:"POST",headers:requestHeaders(true),body:JSON.stringify({prompt:workflow,client_id:crypto.randomUUID()}),signal:AbortSignal.timeout(30000)});
-      const queued=await response.json().catch(()=>({}));
-      if(!response.ok||!queued.prompt_id)throw new Error(queued?.error?.message||queued?.error||JSON.stringify(queued?.node_errors||{})||`HTTP ${response.status}`);
-      const id=String(queued.prompt_id);setPromptId(id);setStatus(`${text.queued} · ${id.slice(0,8)}`);
-      for(let attempt=0;attempt<180&&runRef.current===runId;attempt++){
-        await new Promise(resolve=>window.setTimeout(resolve,1600));
-        const progress=await fetch(serverMode==="cloud"?apiUrl(`/jobs/${encodeURIComponent(id)}`):apiUrl(`/history/${encodeURIComponent(id)}`),{headers:requestHeaders(),cache:"no-store",signal:AbortSignal.timeout(30000)});
-        const data=await progress.json().catch(()=>({}));
-        if(!progress.ok)throw new Error(data?.message||data?.error||`HTTP ${progress.status}`);
-        if(serverMode==="cloud"){
-          if(data.status==="failed"||data.status==="error"||data.status==="cancelled")throw new Error(data?.execution_error?.exception_message||data?.error_message||data.status);
-          if(data.status==="completed"){await loadResults(data.outputs);return}
-        }else{
-          const entry=data?.[id]||data;
-          if(entry?.status?.status_str==="error")throw new Error(entry?.status?.messages?.at?.(-1)?.[1]?.exception_message||"EXECUTION_ERROR");
-          if(entry?.outputs&&Object.keys(entry.outputs).length||entry?.status?.completed===true||entry?.status?.status_str==="success"){await loadResults(entry?.outputs||{});return}
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const savedMode = localStorage.getItem("frame-comfy-real-mode");
+        const savedEndpoint = localStorage.getItem("frame-comfy-real-endpoint");
+        if (savedEndpoint) setEndpoint(savedEndpoint);
+        if (savedMode === "self" && savedEndpoint) {
+          const safe = safeEditorUrl(savedEndpoint, window.location.hostname);
+          if (safe) {
+            setMode("self");
+            if (safe.startsWith("https:")) setEditorUrl(safe);
+            else { setEditorUrl(""); setLaunchOnly(true); setLoading(false); setStatus(text.localOnly); }
+          }
         }
-        setStatus(`${text.running} ${Math.min(99,Math.round((attempt+1)/1.8))}%`);
-      }
-      if(runRef.current===runId)throw new Error("TIMEOUT");
-    }catch(error){if(runRef.current===runId)setStatus(`${text.failed} · ${error instanceof Error?error.message:"UNKNOWN"}`)}
-    finally{if(runRef.current===runId){setRunning(false);setPromptId("")}}
+      } catch {}
+    });
+    return () => { cancelled = true; };
+  }, [text.localOnly]);
+
+  function chooseMode(next: "cloud" | "self") {
+    setMode(next);
+    setLaunchOnly(false);
+    if (next === "cloud") {
+      setEditorUrl(COMFY_CLOUD_URL);
+      setLoading(true);
+      setStatus(text.loading);
+      setFrameKey(value => value + 1);
+    } else {
+      setEditorUrl("");
+      setLoading(false);
+      setStatus(text.selfHint);
+    }
+    try { localStorage.setItem("frame-comfy-real-mode", next); } catch {}
   }
-  async function cancelWorkflow(){const id=promptId;runRef.current++;setRunning(false);setPromptId("");setStatus(text.cancel);if(!id)return;try{await fetch(apiUrl("/queue"),{method:"POST",headers:requestHeaders(true),body:JSON.stringify({delete:[id]}),signal:AbortSignal.timeout(15000)})}catch{}}
 
-  function navigateMinimap(event:ReactPointerEvent<HTMLDivElement>){const rect=event.currentTarget.getBoundingClientRect();const worldX=graphBounds.minX+((event.clientX-rect.left)/rect.width)*graphBounds.width;const worldY=graphBounds.minY+((event.clientY-rect.top)/rect.height)*graphBounds.height;setPan({x:canvasSize.width/2-worldX*zoom,y:canvasSize.height/2-worldY*zoom})}
-  const managerLabel=managerState==="checking"?text.managerChecking:managerState==="ready"?text.managerReady:managerState==="missing"?text.managerMissing:managerState==="cloud"?text.managerCloud:text.managerDefault;
-  const viewportStyle={left:`${((-pan.x/zoom-graphBounds.minX)/graphBounds.width)*100}%`,top:`${((-pan.y/zoom-graphBounds.minY)/graphBounds.height)*100}%`,width:`${Math.min(100,(canvasSize.width/zoom/graphBounds.width)*100)}%`,height:`${Math.min(100,(canvasSize.height/zoom/graphBounds.height)*100)}%`};
+  function loadSelfHosted() {
+    const safe = safeEditorUrl(endpoint, window.location.hostname);
+    if (!safe) { setStatus(text.invalid); return; }
+    try { localStorage.setItem("frame-comfy-real-mode", "self"); localStorage.setItem("frame-comfy-real-endpoint", safe); } catch {}
+    setEndpoint(safe);
+    if (safe.startsWith("http:")) {
+      setEditorUrl(""); setLaunchOnly(true); setLoading(false); setStatus(text.localOnly); return;
+    }
+    setLaunchOnly(false); setEditorUrl(safe); setLoading(true); setStatus(text.loading); setFrameKey(value => value + 1);
+  }
 
-  return <section className="comfy-studio">
-    <aside className="comfy-sidebar">
-      <span className="eyebrow"><span/> COMFY WORKFLOW STUDIO</span><h1>{text.title}</h1><p className="intro">{text.intro}</p>
-      {pipelineTitle&&<div className="pipeline-banner comfy-pipeline"><i>01 → 02</i><span><b>{pipelineTitle}</b><small>{text.storyInput}</small></span><em>CLIP</em></div>}
-      <section className="comfy-connect-card"><div className="comfy-section-title"><span>01</span><div><b>{text.connection}</b><small>{serverMode==="cloud"?text.cloud:text.local}</small></div></div><div className="comfy-mode-switch"><button className={serverMode==="local"?"active":""} onClick={()=>switchServerMode("local")}>{text.local}</button><button className={serverMode==="cloud"?"active":""} onClick={()=>switchServerMode("cloud")}>{text.cloud}</button></div><label><span>{text.endpoint}</span><input value={endpoint} onChange={event=>{setEndpoint(event.target.value);setConnected(false);setServerSchemas({});setManagerState(serverMode==="cloud"?"cloud":"unknown")}} disabled={serverMode==="cloud"}/></label>{serverMode==="local"&&<label><span>AUTH</span><select value={authMode} onChange={event=>setAuthMode(event.target.value as typeof authMode)}><option value="none">NONE</option><option value="bearer">BEARER TOKEN</option><option value="x-api-key">X-API-KEY</option></select></label>}{(serverMode==="cloud"||authMode!=="none")&&<label><span>{text.token}</span><div className="secret-input"><input type={showToken?"text":"password"} value={token} onChange={event=>setToken(event.target.value)} autoComplete="off"/><button onClick={()=>setShowToken(value=>!value)}>{showToken?"—":"••"}</button></div><small>{text.tokenHint}</small></label>}<div className="comfy-connect-actions"><button onClick={testConnection}>{connected?`● ${text.connected}`:text.connect}</button><button onClick={openComfy}>{text.open} ↗</button></div><p>{text.corsHint}</p></section>
-      <section className={`comfy-manager-card state-${managerState}`}><header><span><i/> <b>{text.manager}</b></span><small>{managerLabel}</small></header><p>{text.managerHint}</p>{missingNodeTypes.length>0&&<div className="comfy-missing-nodes"><b>{replaceTemplate(text.missingNodes,missingNodeTypes.length)}</b><span>{missingNodeTypes.slice(0,4).join(" · ")}{missingNodeTypes.length>4?" …":""}</span></div>}<div><button onClick={()=>void detectManager()}>{managerState==="checking"?text.managerChecking:text.managerCheck}</button><button onClick={()=>setManagerGuide(true)}>{text.managerGuide} ↗</button></div></section>
-      <section className="comfy-library"><div className="comfy-section-title"><span>02</span><div><b>{text.library}</b><small>CORE NODES · {NODE_LIBRARY.length}</small></div></div><div>{NODE_LIBRARY.map(item=><button key={item.type} onClick={()=>addNode(item)}><i className={`node-color ${item.color}`}/><span><b>{item.title}</b><small>{item.type}</small></span><em>＋</em></button>)}</div></section>
-    </aside>
-    <main className="comfy-main">
-      <header className="comfy-toolbar"><div><span>{workflowFormat==="ui"?text.formatUi:text.formatApi}</span><b>{replaceTemplate(text.nodeCount,Object.keys(workflow).length)}</b></div><div className="comfy-toolbar-actions"><input id="frame-comfy-import" ref={fileRef} type="file" accept="application/json,.json" onChange={event=>{const file=event.target.files?.[0];if(file)void importWorkflow(file);event.currentTarget.value=""}}/><label htmlFor="frame-comfy-import">↥ {text.import}</label><button onClick={exportWorkflow}>↧ {text.export}</button><button onClick={resetWorkflow}>＋ {text.reset}</button><span/><button aria-label={text.zoomOut} onClick={()=>setZoomAround(zoom-.1)}>−</button><b>{Math.round(zoom*100)}%</b><button aria-label={text.zoomIn} onClick={()=>setZoomAround(zoom+.1)}>＋</button><button onClick={fitCanvas}>⌗ {text.fit}</button></div></header>
-      <section className="comfy-workbench">
-        <div ref={canvasRef} className={`comfy-canvas tool-${canvasTool} ${connectionSource?"is-connecting":""} ${isDragOver?"is-drag-over":""}`} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerCancel={onCanvasPointerUp} onWheel={onWheel} onDragOver={event=>{event.preventDefault();setIsDragOver(true)}} onDragLeave={()=>setIsDragOver(false)} onDrop={event=>{event.preventDefault();setIsDragOver(false);const file=event.dataTransfer.files?.[0];if(file)void importWorkflow(file)}}>
-          <div className="comfy-grid" style={{backgroundPosition:`${pan.x}px ${pan.y}px`,backgroundSize:`${28*zoom}px ${28*zoom}px`}}/>
-          <div className="comfy-world" style={{width:Math.max(2400,graphBounds.maxX+500),height:Math.max(1800,graphBounds.maxY+500),transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`}}>
-            {showLinks&&<svg className="comfy-edges" style={{width:Math.max(2400,graphBounds.maxX+500),height:Math.max(1800,graphBounds.maxY+500)}} aria-hidden="true"><defs><filter id="edgeGlow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>{edges.map(edge=>{const source=positions[edge.sourceId]||{x:0,y:0};const target=positions[edge.targetId]||{x:0,y:0};const x1=source.x+(sizes[edge.sourceId]?.width||DEFAULT_NODE_WIDTH);const y1=source.y+76+edge.output*27;const x2=target.x;const y2=target.y+76+edge.inputIndex*27;const bend=Math.max(70,Math.abs(x2-x1)*.42);return <path key={`${edge.targetId}-${edge.inputName}`} d={`M ${x1} ${y1} C ${x1+bend} ${y1}, ${x2-bend} ${y2}, ${x2} ${y2}`}/>})}</svg>}
-            {Object.entries(workflow).map(([id,node])=>{const position=positions[id]||{x:60,y:60};const size=sizes[id]||defaultNodeSize(node);const names=inputNames(node);const outputs=outputsFor(node,serverSchemas);return <article key={id} className={`comfy-node color-${colorFor(node)} ${selectedId===id?"selected":""}`} style={{left:position.x,top:position.y,width:size.width,height:size.height}} onClick={event=>{event.stopPropagation();setSelectedId(id)}}><header onPointerDown={event=>onNodePointerDown(event,id)}><i/><span><small>#{id} · {node.class_type}</small><b>{titleFor(node)}</b></span><em>⠿</em></header><div className="comfy-node-body"><div className="comfy-inputs">{names.map(name=>{const value=node.inputs[name];const linked=isConnection(value);return <button key={name} className={linked?"linked":""} onClick={event=>{event.stopPropagation();connectInput(id,name)}} title={linked?`${value[0]}:${value[1]}`:name}><i/><span>{name}</span><small>{linked?`${value[0]}:${value[1]}`:value===undefined||value===null?"—":String(value).slice(0,80)}</small></button>})}</div><div className="comfy-outputs">{outputs.map((output,index)=><button key={`${output}-${index}`} className={connectionSource?.nodeId===id&&connectionSource.output===index?"active":""} onClick={event=>{event.stopPropagation();setConnectionSource({nodeId:id,output:index})}}><span>{output}</span><i/></button>)}</div></div><button className="comfy-node-resize" title={text.resize} aria-label={text.resize} onPointerDown={event=>onResizePointerDown(event,id)}>⌟</button></article>})}
-          </div>
-          {!Object.keys(workflow).length&&<div className="comfy-empty"><i>◇</i><b>{text.emptyCanvas}</b><span>{text.library}</span></div>}
-          {connectionSource&&<div className="comfy-connect-toast"><i/> #{connectionSource.nodeId}:{connectionSource.output} · {text.connectFrom}<button onClick={()=>setConnectionSource(null)}>×</button></div>}
-          {isDragOver&&<div className="comfy-drop-overlay"><b>JSON</b><span>{text.dropImport}</span></div>}
-          <div className="comfy-tool-stack">{showMinimap&&<div className="comfy-minimap"><header><span>⌁ {text.minimap}</span><button onClick={()=>setShowMinimap(false)}>×</button></header><div onPointerDown={navigateMinimap}>{Object.keys(workflow).map(id=>{const position=positions[id]||{x:0,y:0};const size=sizes[id]||defaultNodeSize(workflow[id]);return <i key={id} className={id===selectedId?"selected":""} style={{left:`${((position.x-graphBounds.minX)/graphBounds.width)*100}%`,top:`${((position.y-graphBounds.minY)/graphBounds.height)*100}%`,width:`${Math.max(2,(size.width/graphBounds.width)*100)}%`,height:`${Math.max(3,(size.height/graphBounds.height)*100)}%`}}/>})}<b style={viewportStyle}/></div></div>}<nav className="comfy-canvas-tools" aria-label="Canvas tools"><button className={canvasTool==="select"?"active":""} title={text.selectTool} onClick={()=>setCanvasTool("select")}>⌁</button><button className={canvasTool==="pan"?"active":""} title={text.panTool} onClick={()=>setCanvasTool("pan")}>✋</button><span/><button title={text.center} disabled={!selectedId} onClick={centerSelected}>⌾</button><button title={text.zoomOut} onClick={()=>setZoomAround(zoom-.1)}>−</button><b>{Math.round(zoom*100)}%</b><button title={text.zoomIn} onClick={()=>setZoomAround(zoom+.1)}>＋</button><button title={text.fit} onClick={fitCanvas}>▣</button><span/><button className={showMinimap?"active":""} title={text.minimap} onClick={()=>setShowMinimap(value=>!value)}>▱</button><button className={showLinks?"active":""} title={text.links} onClick={()=>setShowLinks(value=>!value)}>⌁</button><button className={snapToGrid?"active":""} title={text.snap} onClick={()=>setSnapToGrid(value=>!value)}>#</button></nav></div>
-          {notice&&<div className={`comfy-notice ${notice.kind}`} role="status" aria-live="polite"><i/>{notice.message}<button onClick={()=>setNotice(null)}>×</button></div>}
-        </div>
-        <aside className="comfy-inspector"><header><span>03 / {text.inspector}</span>{selected&&<b>#{selectedId}</b>}</header>{selected?<><div className="comfy-inspector-title"><i className={`node-color ${colorFor(selected)}`}/><span><b>{titleFor(selected)}</b><small>{selected.class_type}</small></span></div><label><span>TITLE</span><input value={selected._meta?.title||""} placeholder={titleFor(selected)} onChange={event=>updateNode(selectedId,node=>{node._meta={...(node._meta||{}),title:event.target.value}})}/></label><div className="comfy-inspector-inputs">{inputNames(selected).map(name=>{const value=selected.inputs[name];return <label key={name}><span>{name}{isConnection(value)&&<button onClick={()=>updateNode(selectedId,node=>{delete node.inputs[name]})}>{text.disconnect}</button>}</span>{isConnection(value)?<div className="comfy-linked-value"><i/> #{value[0]} · OUTPUT {value[1]}</div>:<ValueEditor value={value??""} onChange={next=>updateNode(selectedId,node=>{node.inputs[name]=next})}/>}</label>})}</div><div className="comfy-inspector-actions"><button onClick={()=>duplicateNode(selectedId)}>⧉ {text.duplicate}</button><button className="danger" onClick={()=>deleteNode(selectedId)}>× {text.delete}</button></div></>:<div className="comfy-inspector-empty"><i>⌁</i><p>{text.selectNode}</p></div>}</aside>
-      </section>
-      <footer className="comfy-runbar"><div className={running?"running":connected?"connected":""}><i/><span><b>{status}</b><small>{running&&promptId?promptId:text.tokenHint}</small></span></div><div>{running?<button className="comfy-cancel" onClick={cancelWorkflow}>{text.cancel}</button>:<button className="comfy-run" onClick={runWorkflow}>▶ {text.run}</button>}</div></footer>
-      {results.length>0&&<section className="comfy-results"><header><span>04 / {text.results}</span><b>{results.length}</b></header><div>{results.map((result,index)=><article key={result.url}>{result.kind==="image"?<img src={result.url} alt={result.name}/>:result.kind==="video"?<video src={result.url} controls/>:<audio src={result.url} controls/>}<span><b>{String(index+1).padStart(2,"0")}</b><small>{result.name}</small><a href={result.url} download={result.name}>↓</a></span></article>)}</div></section>}
-      {managerGuide&&<div className="comfy-manager-modal" role="dialog" aria-modal="true" aria-label={text.managerGuide} onMouseDown={event=>{if(event.target===event.currentTarget)setManagerGuide(false)}}><section><header><span><i/> {text.manager}</span><button onClick={()=>setManagerGuide(false)}>×</button></header><div className="comfy-manager-hero"><small>COMFY CORE · MANAGER</small><h2>{text.managerGuide}</h2><p>{text.managerHint}</p></div><article><b>01 · COMFYUI DESKTOP</b><p>{text.desktop}</p></article><article><b>02 · WINDOWS PORTABLE</b><p>{text.portable}</p><code>.\python_embeded\python.exe -m pip install -r ComfyUI\manager_requirements.txt<br/>.\python_embeded\python.exe -s ComfyUI\main.py --windows-standalone-build --enable-manager</code></article><article><b>03 · MANUAL / VENV</b><code>pip install -r manager_requirements.txt<br/>python main.py --enable-manager</code></article>{missingNodeTypes.length>0&&<article className="missing"><b>{replaceTemplate(text.missingNodes,missingNodeTypes.length)}</b><p>{missingNodeTypes.join(" · ")}</p></article>}<footer><button onClick={()=>void copyManagerCommand()}>{text.copyCommand}</button><button onClick={openComfy}>{text.managerOpen} ↗</button><button onClick={()=>setManagerGuide(false)}>{text.close}</button></footer></section></div>}
-    </main>
+  function openEditor() {
+    const target = mode === "cloud" ? COMFY_CLOUD_URL : safeEditorUrl(endpoint, window.location.hostname);
+    if (!target) { setStatus(text.invalid); return; }
+    window.open(target, "_blank", "noopener,noreferrer");
+  }
+
+  function reloadEditor() {
+    if (!editorUrl) { openEditor(); return; }
+    setLoading(true); setStatus(text.loading); setFrameKey(value => value + 1);
+  }
+
+  async function copyPrompt() {
+    if (!activePrompt) { setStatus(text.noPrompt); return; }
+    try { await navigator.clipboard.writeText(activePrompt); setStatus(text.copied); } catch { setStatus(activePrompt); }
+  }
+
+  function downloadStarterWorkflow() {
+    const blob = new Blob([JSON.stringify(starterWorkflow(activePrompt), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "FRAME-ComfyUI-Starter.json"; anchor.click(); URL.revokeObjectURL(url); setStatus(text.downloaded);
+  }
+
+  return <section className="real-comfy-studio">
+    <header className="real-comfy-header">
+      <div className="real-comfy-brand"><span className="eyebrow"><span /> COMFYUI / OFFICIAL FRONTEND</span><h1>{text.title}</h1><p>{text.intro}</p></div>
+      <div className="real-comfy-mode" role="tablist"><button className={mode === "cloud" ? "active" : ""} onClick={() => chooseMode("cloud")}>{text.cloud}</button><button className={mode === "self" ? "active" : ""} onClick={() => chooseMode("self")}>{text.self}</button></div>
+      {mode === "self" && <div className="real-comfy-endpoint"><label><span>{text.endpoint}</span><input value={endpoint} onChange={event => setEndpoint(event.target.value)} onKeyDown={event => { if (event.key === "Enter") loadSelfHosted(); }} /></label><button onClick={loadSelfHosted}>{text.connect}</button></div>}
+      <div className="real-comfy-actions"><button onClick={reloadEditor}>↻ {text.reload}</button><button className="primary" onClick={openEditor}>{text.open} ↗</button></div>
+    </header>
+
+    <div className="real-comfy-meta"><span><i /> {text.official}</span><b>{text.manager}</b><small>{mode === "cloud" ? text.cloudHint : text.selfHint}</small></div>
+
+    {activePrompt && <aside className="real-comfy-bridge"><div><small>01 → 02 · FRAME BRIDGE</small><b>{pipelineTitle || text.bridge}</b><p>{activePrompt}</p></div><button onClick={copyPrompt}>{text.copyPrompt}</button><button onClick={downloadStarterWorkflow}>{text.downloadWorkflow}</button></aside>}
+
+    <div className={`real-comfy-frame ${launchOnly ? "launch-only" : ""}`}>
+      {editorUrl ? <>
+        {loading && <div className="real-comfy-loading"><i /><b>{text.loading}</b><span>{text.frameHelp}</span></div>}
+        <iframe key={frameKey} src={editorUrl} title="ComfyUI Official Editor" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-pointer-lock" allow="clipboard-read; clipboard-write; fullscreen; web-share" referrerPolicy="no-referrer" onLoad={() => { setLoading(false); setStatus(text.loaded); }} />
+      </> : <div className="real-comfy-launch"><span>COMFYUI</span><h2>{text.localOnly}</h2><p>{text.selfHint}</p><button onClick={openEditor}>{text.open} ↗</button></div>}
+    </div>
+
+    <footer className="real-comfy-footer"><span aria-live="polite"><i /> {status}</span><small>{text.privacy}</small></footer>
   </section>;
 }

@@ -194,22 +194,15 @@ test("connects Story, ComfyUI, Render, and Pose into a production pipeline", asy
   assert.match(studio, /function prepareStoryForComfy/);
   assert.match(studio, /prepareStoryForComfy\(shot\)/);
   assert.match(studio, /ComfyWorkflowStudio/);
-  assert.match(comfy, /normalizeWorkflow/);
-  assert.match(comfy, /normalizeUiWorkflow/);
-  assert.match(comfy, /normalizeWorkflowPayload/);
-  assert.match(comfy, /Save \(API Format\)/);
-  assert.match(comfy, /apiUrl\("\/prompt"\)/);
-  assert.match(comfy, /apiUrl\(`\/history\/\$\{encodeURIComponent\(id\)\}`\)/);
-  assert.match(comfy, /apiUrl\(`\/jobs\/\$\{encodeURIComponent\(id\)\}`\)/);
-  assert.match(comfy, /frame-comfy-workflow-v1/);
-  assert.match(comfy, /frame-comfy-sizes-v1/);
-  assert.match(comfy, /onResizePointerDown/);
-  assert.match(comfy, /comfy-node-resize/);
-  assert.match(comfy, /comfy-minimap/);
-  assert.match(comfy, /comfy-canvas-tools/);
-  assert.match(comfy, /detectManager/);
-  assert.match(comfy, /--enable-manager/);
-  assert.match(comfy, /onDrop=\{event=>/);
+  assert.match(comfy, /COMFY_CLOUD_URL = "https:\/\/cloud\.comfy\.org\/"/);
+  assert.match(comfy, /safeEditorUrl/);
+  assert.match(comfy, /starterWorkflow/);
+  assert.match(comfy, /downloadStarterWorkflow/);
+  assert.match(comfy, /frame-comfy-real-mode/);
+  assert.match(comfy, /<iframe/);
+  assert.match(comfy, /allow-scripts allow-same-origin allow-forms allow-downloads/);
+  assert.match(comfy, /Manager and custom nodes come from the connected ComfyUI service/);
+  assert.doesNotMatch(comfy, /normalizeUiWorkflow|onResizePointerDown|comfy-node-resize/);
   assert.doesNotMatch(comfy, /\/api\/generate/);
   assert.match(studio, /function renderPipelineImage/);
   assert.match(studio, /function sendPoseToRender/);
@@ -219,12 +212,10 @@ test("connects Story, ComfyUI, Render, and Pose into a production pipeline", asy
   assert.match(css, /\.creation-pipeline\{/);
   assert.match(css, /\.pipeline-banner\{/);
   assert.match(css, /\.pose-navigation\{/);
-  assert.match(comfyCss, /\.comfy-canvas\{/);
-  assert.match(comfyCss, /\.comfy-node\{/);
-  assert.match(comfyCss, /\.comfy-node-resize\{/);
-  assert.match(comfyCss, /\.comfy-minimap\{/);
-  assert.match(comfyCss, /\.comfy-canvas-tools\{/);
-  assert.match(comfyCss, /\.comfy-manager-card\{/);
+  assert.match(comfyCss, /\.real-comfy-studio\{/);
+  assert.match(comfyCss, /\.real-comfy-frame iframe\{/);
+  assert.match(comfyCss, /\.real-comfy-bridge\{/);
+  assert.doesNotMatch(comfyCss, /\.comfy-node\{/);
 });
 
 test("uses a model-backed idea mentor and removes local story templates", async () => {

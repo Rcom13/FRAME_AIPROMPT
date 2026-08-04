@@ -30,6 +30,7 @@ const CONTENT_SECURITY_POLICY = [
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline'",
   "connect-src 'self' https: wss:",
+  "frame-src https:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "upgrade-insecure-requests",
@@ -42,7 +43,7 @@ function secureResponse(response: Response, url: URL) {
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
   headers.set("Referrer-Policy", "no-referrer");
-  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=(), clipboard-read=*, clipboard-write=*, fullscreen=*");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("X-Permitted-Cross-Domain-Policies", "none");
   if (url.pathname.startsWith("/api/") || headers.get("content-type")?.includes("text/html")) headers.set("Cache-Control", "no-store");
