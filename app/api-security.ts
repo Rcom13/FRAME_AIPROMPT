@@ -13,10 +13,10 @@ export function apiReply(body:unknown,status=200,extraHeaders:Record<string,stri
 
 export function rejectCrossSiteMutation(request:Request){
   const site=request.headers.get("sec-fetch-site")?.toLowerCase();
-  if(site)return site==="same-origin"||site==="same-site"||site==="none"?null:apiReply({error:"已拒绝跨站请求。"},403);
+  if(site&&site!=="same-origin")return apiReply({error:"已拒绝跨站请求。"},403);
   const origin=request.headers.get("origin");
-  if(!origin)return apiReply({error:"请求来源验证失败。"},403);
-  try{return new URL(origin).origin===new URL(request.url).origin?null:apiReply({error:"请求来源验证失败。"},403)}catch{return apiReply({error:"请求来源验证失败。"},403)}
+  if(origin)try{return new URL(origin).origin===new URL(request.url).origin?null:apiReply({error:"请求来源验证失败。"},403)}catch{return apiReply({error:"请求来源验证失败。"},403)}
+  return site==="same-origin"?null:apiReply({error:"请求来源验证失败。"},403);
 }
 
 export async function readJsonBody<T>(request:Request,maxBytes:number):Promise<T>{

@@ -182,25 +182,35 @@ test("provides a manipulable 3D pose rig and pose-guided image rendering", async
   assert.match(css, /\.pose-people-manager/);
 });
 
-test("connects Story, Prompt, Render, and Pose into a production pipeline", async () => {
-  const [studio, generate, css] = await Promise.all([
+test("connects Story, ComfyUI, Render, and Pose into a production pipeline", async () => {
+  const [studio, comfy, generate, css, comfyCss] = await Promise.all([
     source("../app/Studio.tsx"),
+    source("../app/ComfyWorkflowStudio.tsx"),
     source("../app/api/generate/route.ts"),
     source("../app/globals.css"),
+    source("../app/comfy-workflow.css"),
   ]);
 
-  assert.match(studio, /function prepareStoryForPrompt/);
-  assert.match(studio, /prepareStoryForPrompt\(shot\)/);
-  assert.match(studio, /function sendPromptToRender/);
+  assert.match(studio, /function prepareStoryForComfy/);
+  assert.match(studio, /prepareStoryForComfy\(shot\)/);
+  assert.match(studio, /ComfyWorkflowStudio/);
+  assert.match(comfy, /normalizeWorkflow/);
+  assert.match(comfy, /Save \(API Format\)/);
+  assert.match(comfy, /apiUrl\("\/prompt"\)/);
+  assert.match(comfy, /apiUrl\(`\/history\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.match(comfy, /apiUrl\(`\/jobs\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.match(comfy, /frame-comfy-workflow-v1/);
+  assert.doesNotMatch(comfy, /\/api\/generate/);
   assert.match(studio, /function renderPipelineImage/);
   assert.match(studio, /function sendPoseToRender/);
   assert.match(studio, /pipelineRenderPrompt\?renderPipelineImage\(\):generateImagePrompt\(true\)/);
-  assert.match(studio, /pipelinePromptReferences\.slice\(0,1\)/);
   assert.match(generate, /reasoningEffort:isStory\|\|isPoseEstimation\?"medium":"low"/);
   assert.match(generate, /isPoseEstimation\?2500:2600/);
   assert.match(css, /\.creation-pipeline\{/);
   assert.match(css, /\.pipeline-banner\{/);
   assert.match(css, /\.pose-navigation\{/);
+  assert.match(comfyCss, /\.comfy-canvas\{/);
+  assert.match(comfyCss, /\.comfy-node\{/);
 });
 
 test("uses a model-backed idea mentor and removes local story templates", async () => {
@@ -233,6 +243,15 @@ test("enforces request boundaries on every mutating account and generation API",
     assert.match(route, /enforceRateLimit\(user\.userId/);
     assert.match(route, /readJsonBody\(request,/);
   }
+
+  const [security, auth] = await Promise.all([
+    source("../app/api-security.ts"),
+    source("../app/chatgpt-auth.ts"),
+  ]);
+  assert.match(security, /site&&site!=="same-origin"/);
+  assert.doesNotMatch(security, /same-site/);
+  assert.doesNotMatch(security, /site==="none"/);
+  assert.doesNotMatch(auth, /FRAME_EDGE_TRUST_SECRET|x-frame-edge-secret/);
 });
 
 test("hardens provider URLs, API keys, remote downloads, and global responses", async () => {

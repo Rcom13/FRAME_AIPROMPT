@@ -18,36 +18,8 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
-// Defense in depth: the oai-authenticated-user-* headers are meant to be
-// injected only by the Sites dispatch edge. Nothing in this app can prove a
-// given request actually passed through that edge rather than reaching the
-// origin directly with hand-crafted headers. When FRAME_EDGE_TRUST_SECRET is
-// configured (and the Sites platform is set up to attach the matching value
-// on every proxied request), this closes that gap by requiring proof of the
-// shared secret before the identity headers are trusted at all. Without the
-// env var configured, this check is a no-op and the prior (header-trusting)
-// behavior is unchanged — get platform confirmation that the edge can inject
-// this header before relying on it as your only protection.
-const EDGE_TRUST_HEADER = "x-frame-edge-secret";
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const bytesA = new TextEncoder().encode(a);
-  const bytesB = new TextEncoder().encode(b);
-  if (bytesA.length !== bytesB.length) return false;
-  let diff = 0;
-  for (let i = 0; i < bytesA.length; i++) diff |= bytesA[i] ^ bytesB[i];
-  return diff === 0;
-}
-
-function trustedEdgeVerified(requestHeaders: Headers): boolean {
-  const expected = process.env.FRAME_EDGE_TRUST_SECRET;
-  if (!expected) return true;
-  return timingSafeEqual(requestHeaders.get(EDGE_TRUST_HEADER) || "", expected);
-}
-
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
-  if (!trustedEdgeVerified(requestHeaders)) return null;
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) return null;

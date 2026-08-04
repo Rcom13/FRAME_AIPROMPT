@@ -33,8 +33,6 @@ Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticat
 
 The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
 
-**Security note:** these headers are only trustworthy if the origin is unreachable except through the Sites dispatch edge that injects them. This app (`app/chatgpt-auth.ts`) supports an optional `FRAME_EDGE_TRUST_SECRET` environment variable as a defense-in-depth check: when set, every request must also carry a matching `x-frame-edge-secret` header or it is treated as anonymous. This only helps if the dispatch edge is configured to attach that same secret to every proxied request — confirm with the platform whether that's possible before relying on it as the sole protection against direct-origin access.
-
 SIWC-authenticated workspace sites may also receive
 `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
 `name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
