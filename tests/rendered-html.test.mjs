@@ -34,6 +34,13 @@ test("renders a divergent thought field on the welcome workspace", async () => {
   assert.match(studio, /<IdeaField locale=\{locale\}\/>/);
   assert.match(studio, /\["CHARACTER","CONFLICT","SHOT","RHYTHM","EMOTION","WORLD","MOTIF","SOUND","TURN"\]/);
   assert.match(css, /\.idea-field\{/);
+  for (const mode of ["clean-backdrop", "orbital-backdrop", "neural-backdrop"]) {
+    assert.match(studio, new RegExp(mode));
+  }
+  assert.match(css, /main\.backdrop-globe\{/);
+  assert.match(css, /main\.backdrop-mind\{/);
+  assert.match(css, /@keyframes worldOrbit/);
+  assert.match(css, /@keyframes neuralSignal/);
   assert.match(css, /@keyframes thoughtTrace/);
   assert.match(css, /@keyframes signalTravel/);
   for (const visual of ["story", "workflow", "render", "pose"]) {

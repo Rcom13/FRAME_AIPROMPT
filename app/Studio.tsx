@@ -63,9 +63,39 @@ const sampleImageConcepts:Record<Locale,string>={"zh-CN":"一名女孩站在雨�
 function inspectImageFile(file:File){return new Promise<ImageInfo>((resolve,reject)=>{if(!file.type.startsWith("image/")){reject(new Error("IMAGE_TYPE"));return}if(file.size>10*1024*1024){reject(new Error("IMAGE_SIZE"));return}const reader=new FileReader();reader.onerror=()=>reject(new Error("IMAGE_READ"));reader.onload=()=>{const originalSrc=String(reader.result);const img=new Image();img.onerror=()=>reject(new Error("IMAGE_READ"));img.onload=()=>{const sample=document.createElement("canvas");sample.width=40;sample.height=40;const sampleContext=sample.getContext("2d");if(!sampleContext){reject(new Error("IMAGE_READ"));return}sampleContext.drawImage(img,0,0,40,40);const px=sampleContext.getImageData(0,0,40,40).data;let red=0,green=0,blue=0,count=0;for(let i=0;i<px.length;i+=16){red+=px[i];green+=px[i+1];blue+=px[i+2];count++}red=Math.round(red/count);green=Math.round(green/count);blue=Math.round(blue/count);const brightness=Math.round(.299*red+.587*green+.114*blue);const orientation=img.width>img.height*1.15?"landscape":img.height>img.width*1.15?"portrait":"square";const scale=Math.min(1,1600/Math.max(img.width,img.height));const optimized=document.createElement("canvas");optimized.width=Math.max(1,Math.round(img.width*scale));optimized.height=Math.max(1,Math.round(img.height*scale));const outputContext=optimized.getContext("2d");if(!outputContext){reject(new Error("IMAGE_READ"));return}outputContext.drawImage(img,0,0,optimized.width,optimized.height);const src=optimized.toDataURL("image/jpeg",.84)||originalSrc;resolve({src,name:file.name,width:img.width,height:img.height,orientation,color:`RGB(${red}, ${green}, ${blue})`,tone:brightness>175?"high-key":brightness<80?"low-key":"balanced",size:`${(file.size/1024/1024).toFixed(1)}MB`})};img.src=originalSrc};reader.readAsDataURL(file)})}
 
 function BackdropVisual({mode}:{mode:Backdrop}){
-  if(mode==="globe") return <div className="scene globe-scene" aria-hidden="true"><div className="globe"><i className="orbit o1"/><i className="orbit o2"/><i className="orbit o3"/><i className="axis"/><span className="gdot d1"/><span className="gdot d2"/><span className="gdot d3"/></div><div className="scene-label">ORBITAL STORY MAP · LIVE</div></div>;
-  if(mode==="mind") return <div className="scene mind-scene" aria-hidden="true"><div className="mind-shell"><div className="hemi left"/><div className="hemi right"/>{Array.from({length:14},(_,i)=><i className={`node n${i+1}`} key={i}/>)}{Array.from({length:10},(_,i)=><span className={`synapse s${i+1}`} key={i}/>)}</div><div className="scene-label">NARRATIVE NEURAL FIELD · THINKING</div></div>;
-  return null;
+  if(mode==="globe") return <div className="scene backdrop-scene orbital-backdrop" aria-hidden="true">
+    <div className="orbital-aurora"/><div className="orbital-scan"/>
+    {Array.from({length:24},(_,index)=><i className="orbital-star" key={index} style={{"--star-x":`${7+(index*37)%89}%`,"--star-y":`${5+(index*53)%88}%`,"--star-delay":`${-index*.31}s`} as CSSProperties}/>)}
+    <div className="orbital-globe">
+      <span className="globe-core"/><i className="globe-meridian meridian-one"/><i className="globe-meridian meridian-two"/><i className="globe-meridian meridian-three"/><i className="globe-latitude latitude-one"/><i className="globe-latitude latitude-two"/><i className="globe-latitude latitude-three"/>
+      <span className="orbital-ring ring-alpha"><i/></span><span className="orbital-ring ring-beta"><i/></span><span className="orbital-ring ring-gamma"><i/></span>
+    </div>
+    <div className="orbit-readout"><span>ORBITAL STORY MAP</span><b>LIVE POSITION</b><em>35.68° N / 139.76° E</em></div>
+    <div className="scene-label">WORLD BUILDING FIELD · SYNCHRONIZED</div>
+  </div>;
+  if(mode==="mind"){
+    const neuralNodes=[
+      ["11%","24%","-.4s"],["22%","13%","-1.2s"],["35%","27%","-2s"],["46%","9%","-2.8s"],["61%","18%","-3.6s"],["75%","10%","-4.4s"],["88%","27%","-5.2s"],
+      ["16%","48%","-1.8s"],["31%","43%","-2.6s"],["69%","39%","-3.4s"],["84%","51%","-4.2s"],["95%","43%","-5s"],
+      ["8%","71%","-3s"],["24%","78%","-3.8s"],["39%","66%","-4.6s"],["53%","84%","-5.4s"],["66%","69%","-6.2s"],["80%","82%","-7s"],["93%","68%","-7.8s"]
+    ];
+    const neuralLinks=["-164deg","-143deg","-121deg","-98deg","-73deg","-48deg","-25deg","-8deg","17deg","38deg","61deg","83deg","107deg","132deg","154deg","178deg"];
+    return <div className="scene backdrop-scene neural-backdrop" aria-hidden="true">
+      <div className="neural-aura"/><div className="neural-ripple ripple-one"/><div className="neural-ripple ripple-two"/><div className="neural-ripple ripple-three"/>
+      <div className="neural-field">
+        {neuralLinks.map((angle,index)=><span className="neural-link" key={angle} style={{"--link-angle":angle,"--link-length":`${25+(index%5)*7}vw`,"--link-delay":`${-index*.41}s`} as CSSProperties}><i/></span>)}
+        {neuralNodes.map(([x,y,delay],index)=><i className="neural-node" key={`${x}-${y}`} style={{"--node-x":x,"--node-y":y,"--node-delay":delay,"--node-size":`${index%4===0?13:index%3===0?9:6}px`} as CSSProperties}/>) }
+        <div className="neural-core"><i/><span>IDEA</span><b>∞</b></div>
+        <span className="neural-tag tag-character">CHARACTER</span><span className="neural-tag tag-conflict">CONFLICT</span><span className="neural-tag tag-emotion">EMOTION</span><span className="neural-tag tag-world">WORLD</span><span className="neural-tag tag-turn">TURN</span>
+      </div>
+      <div className="scene-label">NARRATIVE NEURAL FIELD · 19 ACTIVE THOUGHTS</div>
+    </div>;
+  }
+  return <div className="scene backdrop-scene clean-backdrop" aria-hidden="true">
+    <div className="clean-spotlight"><i/><i/></div><div className="clean-perspective"><i/><i/><i/><i/></div><div className="clean-crosshair"><i/><i/></div>
+    <div className="clean-word"><span>FRAME</span><b>FOCUS</b><em>PURE CREATION SPACE</em></div>
+    <div className="scene-label">CLEAN CANVAS · DISTRACTION FREE</div>
+  </div>;
 }
 
 function IdeaField({locale}:{locale:Locale}){
