@@ -17,3 +17,21 @@ aws route53 list-hosted-zones --output json > $OUTDIR/route53.json 2>/dev/null
 aws cloudfront list-distributions --output json > $OUTDIR/cloudfront.json 2>/dev/null
 find $OUTDIR -size -5c -delete
 zip -rq $OUTDIR.zip $OUTDIR && echo "完成，下载路径: $OUTDIR.zip"
+
+
+
+
+2. 調査方針
+
+セキュリティポリシーを考慮し、サードパーティ製ツールは一切使用せず、AWS CloudShellおよびAWS純正CLIのみで実施する。調査対象はap-northeast-1（東京）リージョン、およびリージョンに依存しないグローバルリソース（S3、IAM、Route 53、CloudFront）とする。
+
+3. 実施手順
+AWSマネジメントコンソールにログインし、CloudShellを起動する
+Resource Groups Tagging APIにより、タグ付きリソースの一覧を取得する
+ネットワーク構成情報（VPC、サブネット、ルートテーブル、セキュリティグループ、ENI、ELB、EC2、RDS、Lambda等）を各describe系APIで取得する
+AWS Configが有効な場合は、リソース間の関連情報（relationships）を併せて取得する
+取得結果（JSON）をZIP化し、CloudShellからダウンロードする
+取得データを基にリソース一覧表を整理し、draw.ioにてAWS構成図を作成する
+4. 成果物
+リソース一覧（JSON／CSV）
+AWS構成図（draw.io形式）
