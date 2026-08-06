@@ -1,0 +1,24 @@
+OUTDIR=~/aws_inv_$(date +%Y%m%d_%H%M); mkdir -p $OUTDIR
+REGIONS=$(aws ec2 describe-regions --query 'Regions[].RegionName' --output text)
+echo "Regions: $REGIONS"
+for r in $REGIONS; do
+  echo "== $r =="
+  aws resourcegroupstaggingapi get-resources --region $r --output json > $OUTDIR/tagged_$r.json 2>/dev/null
+  aws ec2 describe-vpcs --region $r --output json > $OUTDIR/vpcs_$r.json 2>/dev/null
+  aws ec2 describe-subnets --region $r --output json > $OUTDIR/subnets_$r.json 2>/dev/null
+  aws ec2 describe-route-tables --region $r --output json > $OUTDIR/rtb_$r.json 2>/dev/null
+  aws ec2 describe-security-groups --region $r --output json > $OUTDIR/sg_$r.json 2>/dev/null
+  aws ec2 describe-network-interfaces --region $r --output json > $OUTDIR/eni_$r.json 2>/dev/null
+  aws ec2 describe-instances --region $r --output json > $OUTDIR/ec2_$r.json 2>/dev/null
+  aws elbv2 describe-load-balancers --region $r --output json > $OUTDIR/elb_$r.json 2>/dev/null
+  aws elbv2 describe-target-groups --region $r --output json > $OUTDIR/tg_$r.json 2>/dev/null
+  aws rds describe-db-instances --region $r --output json > $OUTDIR/rds_$r.json 2>/dev/null
+  aws lambda list-functions --region $r --output json > $OUTDIR/lambda_$r.json 2>/dev/null
+  aws configservice select-resource-config --expression "SELECT resourceId, resourceType, resourceName, relationships, tags" --region $r --output json > $OUTDIR/config_$r.json 2>/dev/null
+done
+aws s3api list-buckets --output json > $OUTDIR/s3.json 2>/dev/null
+aws iam list-roles --output json > $OUTDIR/iam_roles.json 2>/dev/null
+aws route53 list-hosted-zones --output json > $OUTDIR/route53.json 2>/dev/null
+aws cloudfront list-distributions --output json > $OUTDIR/cloudfront.json 2>/dev/null
+find $OUTDIR -size -5c -delete
+zip -rq $OUTDIR.zip $OUTDIR && echo "完成，下载路径: $OUTDIR.zip"
