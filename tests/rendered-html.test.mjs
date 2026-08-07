@@ -188,6 +188,9 @@ test("stores a dedicated encrypted video engine, discovers account models, and r
   assert.match(providers, /docsUrl:/);
   assert.match(providers, /videoProviderSupportsWorkflow/);
   for (const protocol of ["runway-video", "openai-video", "gemini-veo", "byteplus-seedance", "minimax-video", "vidu-video", "pixverse-video", "luma-video"]) assert.match(generationRoute, new RegExp(`provider\\.protocol==="${protocol}"`));
+  assert.match(generationRoute, /addressOnly\.search=""/);
+  assert.match(generationRoute, /veoVideoUri\(data\)/);
+  assert.match(generationRoute, /raiMediaFilteredReasons/);
   assert.match(generationRoute, /klingJwt/);
   assert.match(generationRoute, /inlineData/);
   assert.match(generationRoute, /lastFrame/);

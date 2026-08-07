@@ -30,7 +30,35 @@ function ratio(value="16:9"){return value.match(/(21:9|16:9|9:16|4:3|3:4|1:1)/)?
 function runwayRatio(value:string){return{"16:9":"1280:720","9:16":"720:1280","1:1":"960:960","4:3":"1104:832","3:4":"832:1104","21:9":"1584:672"}[ratio(value)]||"1280:720"}
 function openAiSize(value:string,pro=false){const portrait=ratio(value)==="9:16";return pro?(portrait?"1024x1792":"1792x1024"):(portrait?"720x1280":"1280x720")}
 function nearest(value:number,allowed:number[]){return allowed.reduce((best,item)=>Math.abs(item-value)<Math.abs(best-value)?item:best,allowed[0])}
-function publicVideo(value:unknown){return typeof value==="string"&&isSafePublicHttps(value)?value:null}
+function safeRemoteHttps(value:unknown){
+  if(typeof value!=="string"||!value.trim())return null;
+  try{
+    const url=new URL(value);if(url.hash)return null;
+    const addressOnly=new URL(url.toString());addressOnly.search="";
+    return isSafePublicHttps(addressOnly.toString())?url.toString():null;
+  }catch{return null}
+}
+function publicVideo(value:unknown){return safeRemoteHttps(value)}
+function veoVideoUri(data:any){
+  const response=data?.response||{};const generated=response?.generateVideoResponse||response?.generate_video_response||{};
+  const candidates=[
+    generated?.generatedSamples?.[0]?.video?.uri,
+    generated?.generatedSamples?.[0]?.video?.url,
+    generated?.generated_samples?.[0]?.video?.uri,
+    generated?.generatedVideos?.[0]?.video?.uri,
+    response?.generatedVideos?.[0]?.video?.uri,
+    response?.generated_videos?.[0]?.video?.uri,
+    response?.video?.uri,
+  ];
+  for(const candidate of candidates){const output=safeRemoteHttps(candidate);if(output)return output}
+  return null;
+}
+function veoMissingOutputMessage(data:any){
+  const response=data?.response||{};const generated=response?.generateVideoResponse||response?.generate_video_response||{};
+  const reasons=[...(Array.isArray(generated?.raiMediaFilteredReasons)?generated.raiMediaFilteredReasons:[]),...(Array.isArray(generated?.rai_media_filtered_reasons)?generated.rai_media_filtered_reasons:[])].filter((item):item is string=>typeof item==="string"&&Boolean(item.trim()));
+  const filtered=Number(generated?.raiMediaFilteredCount||generated?.rai_media_filtered_count||0)>0||reasons.length>0;
+  return filtered?`Veo 已完成任务，但生成结果被 Google 内容安全过滤${reasons.length?`：${reasons.join("；").slice(0,500)}`:"。请调整提示词后重试。"}`:"Veo 已完成任务，但响应中没有可下载的视频文件。";
+}
 function taskResponse(provider:{id:string;name:string},model:string,id:unknown,mode="generate"){if(typeof id!=="string"&&typeof id!=="number")return null;return reply({status:"pending",taskToken:encodeTask({provider:provider.id,mode,id:String(id)}),model,provider:provider.name})}
 function requestHeaders(apiKey:string,kind:"bearer"|"token"|"api-key"="bearer"):Record<string,string>{if(kind==="api-key")return{"API-KEY":apiKey};if(kind==="token")return{Authorization:`Token ${apiKey}`};return{Authorization:`Bearer ${apiKey}`}}
 
@@ -51,7 +79,7 @@ async function pixverseUpload(baseUrl:string,apiKey:string,image:DataImage){
 
 async function googleVideoDownload(uri:string,apiKey:string){
   let current=uri;for(let redirects=0;redirects<=3;redirects++){
-    if(!isSafePublicHttps(current))throw new Error("不安全的视频下载地址。");const parsed=new URL(current);const googleHost=parsed.hostname==="generativelanguage.googleapis.com"||parsed.hostname.endsWith(".googleapis.com");if(redirects===0&&!googleHost)throw new Error("无效的 Veo 下载地址。");
+    const safeCurrent=safeRemoteHttps(current);if(!safeCurrent)throw new Error("不安全的视频下载地址。");current=safeCurrent;const parsed=new URL(current);const googleHost=parsed.hostname==="generativelanguage.googleapis.com"||parsed.hostname.endsWith(".googleapis.com");if(redirects===0&&!googleHost)throw new Error("无效的 Veo 下载地址。");
     const response=await fetch(current,{headers:googleHost?{"x-goog-api-key":apiKey}:{},redirect:"manual",signal:AbortSignal.timeout(120000)});if(response.status>=300&&response.status<400){const location=response.headers.get("location");if(!location)throw new Error("Veo 下载重定向无效。");current=new URL(location,current).toString();continue}return response;
   }throw new Error("Veo 下载重定向过多。");
 }
@@ -128,7 +156,7 @@ export async function GET(request:Request){
       const response=await fetch(`${baseUrl}/videos/${encodeURIComponent(task.id)}`,{headers:requestHeaders(config.apiKey),signal:AbortSignal.timeout(30000)});const data=await response.json().catch(()=>({}));if(!response.ok)return reply({error:providerMessage(data,"无法读取 Sora 任务。")},502);if(data.status==="failed")return reply({status:"failed",error:data.error?.message||"Sora 视频生成失败。"});if(data.status!=="completed")return reply({status:"pending",progress:data.progress||null});return reply({status:"succeeded",videoUrl:`/api/generate-video?download=${encodeURIComponent(task.id)}`,model:config.model,provider:provider.name});
     }
     if(provider.protocol==="gemini-veo"){
-      if(!/^[a-zA-Z0-9._/-]+$/.test(task.id))return reply({error:"Veo 任务编号无效。"},400);const response=await fetch(`${baseUrl}/${task.id.replace(/^\/+/,"")}`,{headers:{"x-goog-api-key":config.apiKey},signal:AbortSignal.timeout(30000)});const data=await response.json().catch(()=>({}));if(!response.ok)return reply({error:providerMessage(data,"无法读取 Veo 任务。")},502);if(!data.done)return reply({status:"pending"});if(data.error)return reply({status:"failed",error:providerMessage(data,"Veo 视频生成失败。")});const output=publicVideo(data?.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri||data?.response?.generatedVideos?.[0]?.video?.uri||data?.response?.generated_videos?.[0]?.video?.uri);return output?reply({status:"succeeded",videoUrl:`/api/generate-video?downloadToken=${encodeURIComponent(encodeTask({provider:provider.id,mode:"veo-download",id:output}))}`,model:config.model,provider:provider.name}):reply({status:"failed",error:"Veo 任务完成但没有返回视频文件。"});
+      if(!/^[a-zA-Z0-9._/-]+$/.test(task.id))return reply({error:"Veo 任务编号无效。"},400);const response=await fetch(`${baseUrl}/${task.id.replace(/^\/+/,"")}`,{headers:{"x-goog-api-key":config.apiKey},signal:AbortSignal.timeout(30000)});const data=await response.json().catch(()=>({}));if(!response.ok)return reply({error:providerMessage(data,"无法读取 Veo 任务。")},502);if(!data.done)return reply({status:"pending"});if(data.error)return reply({status:"failed",error:providerMessage(data,"Veo 视频生成失败。")});const output=veoVideoUri(data);return output?reply({status:"succeeded",videoUrl:`/api/generate-video?downloadToken=${encodeURIComponent(encodeTask({provider:provider.id,mode:"veo-download",id:output}))}`,model:config.model,provider:provider.name}):reply({status:"failed",error:veoMissingOutputMessage(data)});
     }
     if(provider.protocol==="kling-video"){
       if(!config.apiSecret)return reply({error:"可灵 Secret Key 尚未配置。"},400);const token=await klingJwt(config.apiKey,config.apiSecret);const response=await fetch(`${baseUrl}/v1/videos/${task.mode}/${encodeURIComponent(task.id)}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});const data=await response.json().catch(()=>({}));if(!response.ok||data?.code&&data.code!==0)return reply({error:providerMessage(data,"无法读取可灵任务。")},502);const status=data?.data?.task_status||data?.status;if(status==="failed")return reply({status:"failed",error:data?.data?.task_status_msg||"可灵视频生成失败。"});if(status!=="succeed")return reply({status:"pending"});const output=publicVideo(data?.data?.task_result?.videos?.[0]?.url);return output?reply({status:"succeeded",videoUrl:output,model:config.model,provider:provider.name}):reply({status:"failed",error:"可灵任务完成但没有返回视频文件。"});
