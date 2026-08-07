@@ -140,25 +140,42 @@ test("stores a separate encrypted image engine and can render real images", asyn
   assert.match(css, /\.image-render-mask\{/);
 });
 
-test("stores a dedicated encrypted video engine and runs asynchronous video tasks", async () => {
-  const [studio, videoStudio, configRoute, generationRoute, storage, schema, migration, providers, css] = await Promise.all([
+test("stores a dedicated encrypted video engine, discovers account models, and renders asynchronous results", async () => {
+  const [studio, videoStudio, configRoute, modelRoute, generationRoute, storage, schema, migration, providers, providerLogo, welcomeVisual, css] = await Promise.all([
     source("../app/Studio.tsx"),
     source("../app/VideoStudio.tsx"),
     source("../app/api/video-config/route.ts"),
+    source("../app/api/video-models/route.ts"),
     source("../app/api/generate-video/route.ts"),
     source("../db/video-generation-config.ts"),
     source("../db/schema.ts"),
     source("../drizzle/0004_flimsy_rafael_vega.sql"),
     source("../app/video-generation-providers.ts"),
+    source("../app/ProviderLogo.tsx"),
+    source("../app/WelcomeModuleVisual.tsx"),
     source("../app/video-studio.css"),
   ]);
 
   assert.match(studio, /workspaceMode==="video"/);
   assert.match(studio, /function prepareStoryForVideo/);
   assert.match(studio, /fetch\("\/api\/video-config"/);
+  assert.match(studio, /fetch\("\/api\/video-models"/);
+  assert.match(studio, /video-engine-models/);
+  assert.match(studio, /Endpoint ID/);
   assert.match(videoStudio, /fetch\("\/api\/generate-video"/);
+  assert.match(videoStudio, /statusError/);
+  assert.match(videoStudio, /<video src=\{videoUrl\} controls playsInline/);
+  assert.doesNotMatch(videoStudio, /className="video-scan"/);
+  assert.doesNotMatch(videoStudio, /className="video-playhead"/);
+  assert.doesNotMatch(welcomeVisual, /className="story-playhead"/);
+  assert.doesNotMatch(welcomeVisual, /className="render-scan"/);
   for (const workflow of ["text-to-video", "image-to-video", "first-last-frame"]) assert.match(videoStudio, new RegExp(`"${workflow}"`));
   assert.match(configRoute, /saveStoredVideoGenerationConfig/);
+  assert.doesNotMatch(configRoute, /provider\.models\.some\(item=>item\.id===model\)/);
+  assert.match(modelRoute, /LIVE_DISCOVERY/);
+  assert.match(modelRoute, /source:"account"/);
+  assert.match(modelRoute, /source:"catalog"/);
+  assert.match(modelRoute, /getStoredVideoGenerationConfig/);
   assert.match(storage, /AES-GCM/);
   assert.match(storage, /video:\$\{label\}:\$\{userId\}/);
   assert.match(storage, /encryptSecret\(userId,"secret"/);
@@ -166,7 +183,8 @@ test("stores a dedicated encrypted video engine and runs asynchronous video task
   assert.match(migration, /CREATE TABLE `video_generation_configs`/);
   for (const protocol of ["runway-video", "openai-video", "gemini-veo", "kling-video", "byteplus-seedance", "minimax-video", "vidu-video", "pixverse-video", "luma-video", "dashscope-wan"]) assert.match(providers, new RegExp(`protocol:"${protocol}"`));
   for (const brand of ["Runway", "OpenAI Sora", "Google Veo", "Kling AI", "Seedance / BytePlus", "MiniMax Hailuo", "Vidu", "PixVerse", "Luma Ray", "Alibaba Wan"]) assert.match(providers, new RegExp(brand));
-  assert.match(providers, /logo:/);
+  assert.match(providers, /\/provider-logos\/hailuo\.png/);
+  assert.match(providerLogo, /failedSrc/);
   assert.match(providers, /docsUrl:/);
   assert.match(providers, /videoProviderSupportsWorkflow/);
   for (const protocol of ["runway-video", "openai-video", "gemini-veo", "byteplus-seedance", "minimax-video", "vidu-video", "pixverse-video", "luma-video"]) assert.match(generationRoute, new RegExp(`provider\\.protocol==="${protocol}"`));

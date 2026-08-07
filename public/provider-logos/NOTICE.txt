@@ -1,0 +1,3 @@
+Provider logo PNG assets are sourced from LobeHub Icons Static PNG 1.95.0.
+Copyright (c) LobeHub contributors. Licensed under the MIT License.
+Brand names and marks remain the property of their respective owners.

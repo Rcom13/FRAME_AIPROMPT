@@ -22,7 +22,7 @@ export async function POST(request:Request){
   if(!VIDEO_GENERATION_PROVIDERS.some(item=>item.id===body.providerId))return reply({error:"不支持的视频服务商。"},400);
   const provider=videoGenerationProviderById(body.providerId);const apiBaseUrl=normalizeVideoBaseUrl(body.apiBaseUrl||provider.baseUrl);const model=body.model?.trim()||"";const apiKey=body.apiKey?.trim()||undefined;const apiSecret=body.apiSecret?.trim()||undefined;
   if(!safeModelId(model))return reply({error:"请选择有效的视频生成模型。"},400);
-  if(!provider.models.some(item=>item.id===model))return reply({error:"请选择该服务商官方列表中的视频模型。"},400);
+  // Some providers expose account-specific endpoint IDs that are not present in the public catalog.
   if(!isTrustedVideoProviderUrl(apiBaseUrl,provider))return reply({error:"视频接口必须使用该服务商的官方安全 HTTPS 地址。"},400);
   if(apiKey&&apiKey.length<8)return reply({error:provider.auth==="access-secret"?"Access Key 不完整。":"视频生成 API Key 不完整。"},400);
   if(provider.auth==="access-secret"&&!apiSecret){const existing=await getStoredVideoGenerationConfigSummary(user.userId);if(!existing?.hasApiSecret||existing.providerId!==provider.id)return reply({error:"可灵官方接口还需要 Secret Key。"},400)}

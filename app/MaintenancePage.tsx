@@ -39,7 +39,6 @@ export default function MaintenancePage({ signedIn, signInPath, signOutPath }: M
         <div className="maintenance-orbit orbit-a" /><div className="maintenance-orbit orbit-b" /><div className="maintenance-orbit orbit-c" />
         <div className="maintenance-core"><i /><span>FRAME</span><b>04</b></div>
         {nodes.map(([left,top,delay,lineAngle],index)=><span className="maintenance-node" key={index} style={{left,top,"--delay":delay,"--line-angle":lineAngle} as CSSProperties}><i /></span>)}
-        <div className="maintenance-scan" />
         <div className="maintenance-readout"><span>REBUILD SEQUENCE</span><b>ACTIVE</b></div>
       </div>
     </section>

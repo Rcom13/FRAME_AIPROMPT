@@ -16,7 +16,16 @@ function imageBlob(image:DataImage){return new Blob([Uint8Array.from(atob(image.
 function imageExtension(image:DataImage){return image.mediaType.includes("png")?"png":image.mediaType.includes("webp")?"webp":"jpg"}
 function encodeTask(value:TaskRef){return btoa(JSON.stringify(value)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")}
 function decodeTask(value:string){try{if(!value||value.length>12000)return null;const normalized=value.replace(/-/g,"+").replace(/_/g,"/");const parsed=JSON.parse(atob(normalized+"=".repeat((4-normalized.length%4)%4)));return parsed&&typeof parsed.provider==="string"&&typeof parsed.mode==="string"&&typeof parsed.id==="string"?parsed as TaskRef:null}catch{return null}}
-function providerMessage(payload:any,fallback:string){const value=payload?.error?.message||payload?.error||payload?.message||payload?.msg||payload?.ErrMsg||payload?.base_resp?.status_msg||payload?.failure_reason;return typeof value==="string"&&value.trim()?value:fallback}
+function providerMessage(payload:any,fallback:string){
+  const value=payload?.error?.message||payload?.error||payload?.message||payload?.msg||payload?.ErrMsg||payload?.base_resp?.status_msg||payload?.failure_reason;
+  if(typeof value!=="string"||!value.trim())return fallback;
+  const message=value.trim();
+  if(/insufficient\s*(balance|credit|quota)|balance\s*(is\s*)?insufficient|not\s*enough\s*(balance|credit)|余额不足|欠费/i.test(message))return"视频服务商账户余额不足。请先在服务商控制台充值，或切换到其他已配置的视频模型。";
+  if(/invalid\s*(api[-_ ]?key|token)|unauthori[sz]ed|authentication\s*failed|access\s*denied|forbidden|鉴权失败|密钥无效/i.test(message))return"API Key 无效，或当前账号没有访问该视频模型的权限。请重新检查 API 配置。";
+  if(/rate\s*limit|too\s*many\s*requests|频率|限流/i.test(message))return"视频服务商当前请求过于频繁，请稍后再试。";
+  if(/model\s*(not\s*found|invalid|unsupported)|invalid\s*model|模型不存在|不支持.*模型/i.test(message))return"当前视频模型不可用。请在 API 配置中重新选择服务商支持的模型。";
+  return message;
+}
 function ratio(value="16:9"){return value.match(/(21:9|16:9|9:16|4:3|3:4|1:1)/)?.[1]||"16:9"}
 function runwayRatio(value:string){return{"16:9":"1280:720","9:16":"720:1280","1:1":"960:960","4:3":"1104:832","3:4":"832:1104","21:9":"1584:672"}[ratio(value)]||"1280:720"}
 function openAiSize(value:string,pro=false){const portrait=ratio(value)==="9:16";return pro?(portrait?"1024x1792":"1792x1024"):(portrait?"720x1280":"1280x720")}
@@ -58,7 +67,6 @@ export async function POST(request:Request){
   const start=dataImage(body.startFrame);const end=dataImage(body.endFrame);if(workflow!=="text-to-video"&&!start)return reply({error:"图生视频需要首帧图片。"},400);if(workflow==="first-last-frame"&&!end)return reply({error:"首尾帧模式需要两张图片。"},400);
   if((body.startFrame?.length||0)+(body.endFrame?.length||0)>20_000_000)return reply({error:"首尾帧图片总体积过大。"},413);
   const provider=videoGenerationProviderById(config.providerId);if(!isTrustedVideoProviderUrl(config.apiBaseUrl,provider))return reply({error:"视频生成接口配置不安全。"},400);
-  if(!provider.models.some(item=>item.id===config.model))return reply({error:"已保存的视频模型已过期或不属于该官方接口，请在 Profile 中重新选择。"},400);
   if(!videoProviderSupportsWorkflow(provider,config.model,workflow))return reply({error:`${config.model} 不支持当前生成方式，请切换模型或模式。`},400);
   const baseUrl=config.apiBaseUrl.replace(/\/+$/,"");const duration=Math.max(2,Math.min(15,Math.round(Number(body.duration)||5)));const aspect=ratio(body.aspect||"");
   try{

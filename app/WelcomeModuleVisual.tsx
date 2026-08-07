@@ -10,7 +10,6 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
       <i className="story-frame frame-three"><b>03</b><span /><em>MOVE</em></i>
       <i className="story-frame frame-four"><b>04</b><span /><em>TURN</em></i>
     </div>
-    <span className="story-playhead" />
     <div className="preview-hud"><span><i /> NARRATIVE SEQUENCE</span><b>00:24:08</b></div>
     </div>
   </div>;
@@ -33,7 +32,7 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
     <div className="preview-stage">
     <span className="preview-grid" />
     <div className="render-layers"><i /><i /><i /></div>
-    <div className="render-frame"><span className="render-sun" /><span className="render-horizon" /><span className="render-subject" /><b className="render-scan" /></div>
+    <div className="render-frame"><span className="render-sun" /><span className="render-horizon" /><span className="render-subject" /></div>
     <div className="render-aperture"><i /><i /><i /></div>
     <div className="render-meter"><i /><i /><i /><i /><i /></div>
     <div className="preview-hud"><span><i /> SYNTHESIS ACTIVE</span><b>1536 × 1024</b></div>
@@ -43,8 +42,8 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
   return <div className="module-visual portal-preview portal-video-preview" aria-hidden="true">
     <div className="preview-stage">
     <span className="preview-grid" />
-    <div className="portal-video-frame"><i className="portal-video-sun"/><i className="portal-video-horizon"/><i className="portal-video-subject"/><span className="portal-video-path"/><b/></div>
-    <div className="portal-video-timeline"><i/><i/><i/><i/><span/></div>
+    <div className="portal-video-frame"><i className="portal-video-sun"/><i className="portal-video-horizon"/><i className="portal-video-subject"/><span className="portal-video-path"/></div>
+    <div className="portal-video-timeline"><i/><i/><i/><i/></div>
     <div className="portal-video-play">▶</div>
     <div className="preview-hud"><span><i /> VIDEO ENGINE READY</span><b>SHOT 04 · 00:08</b></div>
     </div>
