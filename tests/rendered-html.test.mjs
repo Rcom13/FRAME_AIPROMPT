@@ -489,7 +489,8 @@ test("supports multiple model connections, workspace selection, centralized erro
   assert.match(errorCenter, /top-center|global-error-center/);
   assert.match(css, /\.global-error-center\{/);
   assert.match(docs, /FRAME 错误代码/);
-  assert.match(page, /developerAccess=\{Boolean\(maintenance && isMaintenanceOwner\(account\)\)\}/);
+  assert.match(page, /developerAccess=\{Boolean\(isMaintenanceOwner\(account\)\)\}/);
+  assert.match(studio, /owner-access-badge/);
   assert.match(studio, /developerAccess\?homeCopy\.rhtv\.enter/);
   assert.match(studio, /construction-visual/);
   assert.match(rhtv, /rhtv-artboard/);

@@ -16,5 +16,5 @@ export default async function Home() {
     email: account.email,
     userId: account.userId,
   } : null;
-  return <Studio user={user} developerAccess={Boolean(maintenance && isMaintenanceOwner(account))} />;
+  return <Studio user={user} developerAccess={Boolean(isMaintenanceOwner(account))} />;
 }
