@@ -51,12 +51,12 @@ test("renders a divergent thought field on the welcome workspace", async () => {
   assert.match(css, /grid-template-columns:1fr;gap:14px/);
   assert.match(layout, /viewportFit:\s*"cover"/);
   assert.match(css, /@keyframes signalTravel/);
-  for (const visual of ["story", "workflow", "render", "pose"]) {
+  for (const visual of ["story", "workflow", "render", "video"]) {
     assert.match(studio, new RegExp(`WelcomeModuleVisual type="${visual}"`));
   }
   assert.match(studio, /onPointerMove=\{moveModuleCard\}/);
   assert.match(visuals, /GRAPH ONLINE/);
-  assert.match(visuals, /HUMAN RIG ACTIVE/);
+  assert.match(visuals, /VIDEO ENGINE READY/);
   assert.match(css, /@keyframes graphPacket/);
   assert.match(css, /@keyframes rigBodyFloat/);
   assert.match(css, /prefers-reduced-motion:reduce/);
@@ -138,6 +138,40 @@ test("stores a separate encrypted image engine and can render real images", asyn
   assert.match(generationRoute, /pollToken/);
   assert.match(css, /\.render-studio/);
   assert.match(css, /\.image-render-mask\{/);
+});
+
+test("stores a dedicated encrypted video engine and runs asynchronous video tasks", async () => {
+  const [studio, videoStudio, configRoute, generationRoute, storage, schema, migration, providers, css] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/VideoStudio.tsx"),
+    source("../app/api/video-config/route.ts"),
+    source("../app/api/generate-video/route.ts"),
+    source("../db/video-generation-config.ts"),
+    source("../db/schema.ts"),
+    source("../drizzle/0004_flimsy_rafael_vega.sql"),
+    source("../app/video-generation-providers.ts"),
+    source("../app/video-studio.css"),
+  ]);
+
+  assert.match(studio, /workspaceMode==="video"/);
+  assert.match(studio, /function prepareStoryForVideo/);
+  assert.match(studio, /fetch\("\/api\/video-config"/);
+  assert.match(videoStudio, /fetch\("\/api\/generate-video"/);
+  for (const workflow of ["text-to-video", "image-to-video", "first-last-frame"]) assert.match(videoStudio, new RegExp(`"${workflow}"`));
+  assert.match(configRoute, /saveStoredVideoGenerationConfig/);
+  assert.match(storage, /AES-GCM/);
+  assert.match(storage, /video:\$\{label\}:\$\{userId\}/);
+  assert.match(storage, /encryptSecret\(userId,"secret"/);
+  assert.match(schema, /videoGenerationConfigs/);
+  assert.match(migration, /CREATE TABLE `video_generation_configs`/);
+  for (const protocol of ["runway-video", "openai-video", "gemini-veo", "kling-video"]) assert.match(providers, new RegExp(`protocol:"${protocol}"`));
+  for (const brand of ["Runway", "OpenAI Sora", "Google Veo", "Kling AI"]) assert.match(providers, new RegExp(brand));
+  assert.match(providers, /logo:/);
+  for (const protocol of ["runway-video", "openai-video", "gemini-veo"]) assert.match(generationRoute, new RegExp(`provider\\.protocol==="${protocol}"`));
+  assert.match(generationRoute, /klingJwt/);
+  assert.match(generationRoute, /taskToken/);
+  assert.match(css, /\.video-studio\{/);
+  assert.match(css, /\.portal-video-preview\{/);
 });
 
 test("provides a manipulable 3D pose rig and pose-guided image rendering", async () => {
@@ -288,6 +322,8 @@ test("enforces request boundaries on every mutating account and generation API",
     source("../app/api/models/route.ts"),
     source("../app/api/generate/route.ts"),
     source("../app/api/generate-image/route.ts"),
+    source("../app/api/video-config/route.ts"),
+    source("../app/api/generate-video/route.ts"),
     source("../app/api/comfy-config/route.ts"),
   ]);
 
@@ -308,15 +344,17 @@ test("enforces request boundaries on every mutating account and generation API",
 });
 
 test("hardens provider URLs, API keys, remote downloads, and global responses", async () => {
-  const [security, models, generate, generateImage, worker, schema, migration, comfyMigration] = await Promise.all([
+  const [security, models, generate, generateImage, generateVideo, worker, schema, migration, comfyMigration, videoMigration] = await Promise.all([
     source("../app/api-security.ts"),
     source("../app/api/models/route.ts"),
     source("../app/api/generate/route.ts"),
     source("../app/api/generate-image/route.ts"),
+    source("../app/api/generate-video/route.ts"),
     source("../worker/index.ts"),
     source("../db/schema.ts"),
     source("../drizzle/0002_friendly_molten_man.sql"),
     source("../drizzle/0003_absent_shiver_man.sql"),
+    source("../drizzle/0004_flimsy_rafael_vega.sql"),
   ]);
 
   for (const blocked of ["localhost", "metadata.google.internal", ".internal", "169&&b===254", "2001:db8"]) {
@@ -329,6 +367,7 @@ test("hardens provider URLs, API keys, remote downloads, and global responses", 
   assert.doesNotMatch(`${models}\n${generate}`, /\?key=\$\{/);
   assert.match(generateImage, /redirect:"manual"/);
   assert.match(generateImage, /redirects<=3/);
+  assert.match(generateVideo, /isSafePublicHttps/);
   for (const header of ["Content-Security-Policy", "Strict-Transport-Security", "X-Frame-Options", "Permissions-Policy", "X-Content-Type-Options"]) {
     assert.match(worker, new RegExp(header));
   }
@@ -336,6 +375,8 @@ test("hardens provider URLs, API keys, remote downloads, and global responses", 
   assert.match(migration, /CREATE TABLE `api_rate_limits`/);
   assert.match(schema, /comfyBackendConfigs/);
   assert.match(comfyMigration, /CREATE TABLE `comfy_backend_configs`/);
+  assert.match(schema, /videoGenerationConfigs/);
+  assert.match(videoMigration, /CREATE TABLE `video_generation_configs`/);
 });
 
 test("adds keyboard and outside-click navigation, visible focus states, and background GPU throttling", async () => {
@@ -371,6 +412,8 @@ test("gates external visitors and APIs behind a dedicated maintenance page", asy
     source("../app/api/image-config/route.ts"),
     source("../app/api/generate/route.ts"),
     source("../app/api/generate-image/route.ts"),
+    source("../app/api/video-config/route.ts"),
+    source("../app/api/generate-video/route.ts"),
     source("../app/api/comfy-config/route.ts"),
   ]);
 

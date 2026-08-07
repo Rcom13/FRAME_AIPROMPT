@@ -1,4 +1,4 @@
-type WelcomeVisual = "story" | "workflow" | "render" | "pose";
+type WelcomeVisual = "story" | "workflow" | "render" | "video";
 
 export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
   if (type === "story") return <div className="module-visual portal-preview story-preview" aria-hidden="true">
@@ -40,26 +40,13 @@ export default function WelcomeModuleVisual({ type }: { type: WelcomeVisual }) {
     </div>
   </div>;
 
-  return <div className="module-visual portal-preview pose-preview" aria-hidden="true">
+  return <div className="module-visual portal-preview portal-video-preview" aria-hidden="true">
     <div className="preview-stage">
     <span className="preview-grid" />
-    <div className="pose-orbit orbit-one" /><div className="pose-orbit orbit-two" />
-    <div className="preview-rig">
-      <i className="rig-head" /><i className="rig-joint joint-neck" />
-      <span className="rig-bone bone-torso" /><span className="rig-bone bone-hips" />
-      <span className="rig-bone bone-upper-arm left" /><span className="rig-bone bone-forearm left" />
-      <span className="rig-bone bone-upper-arm right" /><span className="rig-bone bone-forearm right" />
-      <span className="rig-bone bone-thigh left" /><span className="rig-bone bone-shin left" />
-      <span className="rig-bone bone-thigh right" /><span className="rig-bone bone-shin right" />
-      <i className="rig-joint joint-shoulder left" /><i className="rig-joint joint-shoulder right" />
-      <i className="rig-joint joint-elbow left" /><i className="rig-joint joint-elbow right" />
-      <i className="rig-joint joint-hand left" /><i className="rig-joint joint-hand right" />
-      <i className="rig-joint joint-hip left" /><i className="rig-joint joint-hip right" />
-      <i className="rig-joint joint-knee left" /><i className="rig-joint joint-knee right" />
-      <i className="rig-joint joint-foot left" /><i className="rig-joint joint-foot right" />
-    </div>
-    <div className="pose-axis"><i>X</i><i>Y</i><i>Z</i></div>
-    <div className="preview-hud"><span><i /> HUMAN RIG ACTIVE</span><b>14 JOINTS · IK</b></div>
+    <div className="portal-video-frame"><i className="portal-video-sun"/><i className="portal-video-horizon"/><i className="portal-video-subject"/><span className="portal-video-path"/><b/></div>
+    <div className="portal-video-timeline"><i/><i/><i/><i/><span/></div>
+    <div className="portal-video-play">▶</div>
+    <div className="preview-hud"><span><i /> VIDEO ENGINE READY</span><b>SHOT 04 · 00:08</b></div>
     </div>
   </div>;
 }
