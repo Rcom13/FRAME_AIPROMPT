@@ -51,3 +51,22 @@ export const apiRateLimits = sqliteTable("api_rate_limits", {
   count: integer("count").notNull(),
   expiresAt: integer("expires_at").notNull(),
 }, table=>[index("idx_api_rate_limits_expires_at").on(table.expiresAt)]);
+
+export const modelServiceConnections = sqliteTable("model_service_connections", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  kind: text("kind").notNull(),
+  label: text("label").notNull(),
+  providerId: text("provider_id").notNull(),
+  apiBaseUrl: text("api_base_url").notNull(),
+  modelId: text("model_id").notNull(),
+  encryptedApiKey: text("encrypted_api_key").notNull(),
+  keyIv: text("key_iv").notNull(),
+  encryptedApiSecret: text("encrypted_api_secret"),
+  secretIv: text("secret_iv"),
+  createdAt: integer("created_at", { mode:"timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode:"timestamp_ms" }).notNull(),
+}, table=>[
+  index("idx_model_service_connections_user_kind").on(table.userId,table.kind),
+  index("idx_model_service_connections_user_updated").on(table.userId,table.updatedAt),
+]);

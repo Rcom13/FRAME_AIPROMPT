@@ -23,10 +23,9 @@ test("keeps model credentials in encrypted account storage", async () => {
   assert.match(schema, /userId:\s*text\("user_id"\)\.primaryKey\(\)/);
 });
 
-test("renders a divergent thought field on the welcome workspace", async () => {
-  const [studio, visuals, css, layout] = await Promise.all([
+test("renders a divergent thought field and photographic workspace covers", async () => {
+  const [studio, css, layout] = await Promise.all([
     source("../app/Studio.tsx"),
-    source("../app/WelcomeModuleVisual.tsx"),
     source("../app/globals.css"),
     source("../app/layout.tsx"),
   ]);
@@ -45,20 +44,17 @@ test("renders a divergent thought field on the welcome workspace", async () => {
   assert.match(css, /@keyframes worldOrbit/);
   assert.match(css, /@keyframes neuralSignal/);
   assert.match(css, /@keyframes thoughtTrace/);
-  assert.match(visuals, /className="preview-stage"/);
-  assert.match(css, /aspect-ratio:4\/1/);
-  assert.match(css, /@container\(max-width:390px\)/);
+  assert.match(css, /\.module-photo\{/);
+  assert.match(css, /\.module-photo img\{/);
   assert.match(css, /grid-template-columns:1fr;gap:14px/);
   assert.match(layout, /viewportFit:\s*"cover"/);
   assert.match(css, /@keyframes signalTravel/);
   for (const visual of ["story", "workflow", "render", "video"]) {
-    assert.match(studio, new RegExp(`WelcomeModuleVisual type="${visual}"`));
+    assert.match(studio, new RegExp(`/workspace-covers/${visual}\\.webp`));
   }
   assert.match(studio, /onPointerMove=\{moveModuleCard\}/);
-  assert.match(visuals, /GRAPH ONLINE/);
-  assert.match(visuals, /VIDEO ENGINE READY/);
-  assert.match(css, /@keyframes graphPacket/);
-  assert.match(css, /@keyframes rigBodyFloat/);
+  assert.match(studio, /homeCopy\.workflow\.title/);
+  assert.match(studio, /homeCopy\.video\.title/);
   assert.match(css, /prefers-reduced-motion:reduce/);
 });
 
@@ -445,7 +441,8 @@ test("gates external visitors and APIs behind a dedicated maintenance page", asy
     source("../app/api/comfy-config/route.ts"),
   ]);
 
-  assert.match(page, /maintenanceModeEnabled\(\) && !isMaintenanceOwner\(account\)/);
+  assert.match(page, /const maintenance = maintenanceModeEnabled\(\)/);
+  assert.match(page, /maintenance && !isMaintenanceOwner\(account\)/);
   assert.match(page, /<MaintenancePage/);
   assert.match(maintenance, /SITE_MAINTENANCE_MODE/);
   assert.match(maintenance, /SITE_MAINTENANCE_OWNER_EMAILS/);
@@ -458,4 +455,43 @@ test("gates external visitors and APIs behind a dedicated maintenance page", asy
     assert.match(route, /maintenanceResponse/);
     assert.match(route, /if\(maintenance\)return maintenance/);
   }
+});
+
+test("supports multiple model connections, workspace selection, centralized errors, and a private fifth workspace", async () => {
+  const [studio, route, storage, schema, errors, errorCenter, rhtv, page, css, docs, migration] = await Promise.all([
+    source("../app/Studio.tsx"),
+    source("../app/api/model-services/route.ts"),
+    source("../db/model-services.ts"),
+    source("../db/schema.ts"),
+    source("../app/error-codes.ts"),
+    source("../app/ErrorCenter.tsx"),
+    source("../app/RHTVStudio.tsx"),
+    source("../app/page.tsx"),
+    source("../app/globals.css"),
+    source("../docs/error-codes.md"),
+    source("../drizzle/0005_futuristic_harrier.sql"),
+  ]);
+
+  assert.match(studio, /连接你的模型服务/);
+  assert.match(studio, /model-service-button/);
+  assert.match(studio, /workspace-model-switch/);
+  assert.match(studio, /service-connection-grid/);
+  assert.match(studio, /activateModelService/);
+  assert.match(route, /action===\"activate\"/);
+  assert.match(route, /importLegacy/);
+  assert.match(storage, /AES-GCM/);
+  assert.match(storage, /listModelServices/);
+  assert.match(schema, /modelServiceConnections/);
+  assert.match(migration, /CREATE TABLE `model_service_connections`/);
+  assert.match(errors, /AUTH-1001/);
+  assert.match(errors, /VID-4209/);
+  assert.match(errors, /COMFY-4305/);
+  assert.match(errorCenter, /top-center|global-error-center/);
+  assert.match(css, /\.global-error-center\{/);
+  assert.match(docs, /FRAME 错误代码/);
+  assert.match(page, /developerAccess=\{Boolean\(maintenance && isMaintenanceOwner\(account\)\)\}/);
+  assert.match(studio, /developerAccess\?homeCopy\.rhtv\.enter/);
+  assert.match(studio, /construction-visual/);
+  assert.match(rhtv, /rhtv-artboard/);
+  assert.match(rhtv, /rhtv-timeline/);
 });

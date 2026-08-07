@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const account = await getChatGPTUser();
-  if (maintenanceModeEnabled() && !isMaintenanceOwner(account)) {
+  const maintenance = maintenanceModeEnabled();
+  if (maintenance && !isMaintenanceOwner(account)) {
     return <MaintenancePage signedIn={Boolean(account)} signInPath={chatGPTSignInPath("/")} signOutPath={chatGPTSignOutPath("/")} />;
   }
   const user = account ? {
@@ -15,5 +16,5 @@ export default async function Home() {
     email: account.email,
     userId: account.userId,
   } : null;
-  return <Studio user={user} />;
+  return <Studio user={user} developerAccess={Boolean(maintenance && isMaintenanceOwner(account))} />;
 }
